@@ -2,6 +2,7 @@
 .env
 build/
 install/
+.cache/
 CMakeUserPresets.json
 *-workspace
 /.vscode/*.json

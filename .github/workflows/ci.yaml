@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    name: ${{ matrix.config.name }}
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - {
+              name: "Ubuntu GCC 13",
+              os: ubuntu-latest,
+              cxx: g++-13
+            }
+          - {
+              name: "Ubuntu Clang 18",
+              os: ubuntu-latest,
+              cxx: clang++-18
+            }
+          - {
+              name: "Windows MSVC",
+              os: windows-latest,
+              cxx: cl
+            }
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Dependencies (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        if [ "${{ matrix.config.cxx }}" = "g++-13" ]; then
+          sudo apt-get install -y g++-13
+        else
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 18
+          sudo apt-get install -y clang-18
+        fi
+
+    - name: Configure CMake
+      run: |
+        if [ "${{ matrix.config.os }}" = "windows-latest" ]; then
+          cmake -B build -DSOATABLE_BUILD_TESTS=ON -DSOATABLE_BUILD_EXAMPLES=ON
+        else
+          cmake -B build -DSOATABLE_BUILD_TESTS=ON -DSOATABLE_BUILD_EXAMPLES=ON -DCMAKE_CXX_COMPILER=${{ matrix.config.cxx }}
+        fi
+      shell: bash
+
+    - name: Build
+      run: cmake --build build --config Release
+
+    - name: Run Tests
+      run: |
+        cd build
+        ctest -C Release --output-on-failure
+      shell: bash

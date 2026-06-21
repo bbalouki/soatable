@@ -38,47 +38,61 @@ namespace soatable {
 /// Contains an index into the row metadata and a generation count to prevent
 /// the ABA problem (referencing a new row with an old handle).
 struct row_id {
-    /// @brief The index of the row in the table.
+    /// @brief The index of the row in the table's internal storage.
     std::uint32_t index = 0;
-    /// @brief The generation of the row at this index.
+    /// @brief The generation of the row at this index. Incremented when a row is erased.
     std::uint32_t generation = 0;
 
-    /// @brief Default equality operator.
-    constexpr bool operator==(const row_id&) const = default;
+    /// @brief Default equality operator for comparing two row_ids.
+    /// @param other The other row_id to compare against.
+    /// @return True if both index and generation match, false otherwise.
+    constexpr bool operator==(const row_id& other) const = default;
 };
 
 /// @brief Helper concept to check if a type is present in a parameter pack.
+/// @tparam T The type to search for.
+/// @tparam Types The parameter pack to search in.
 template <typename T, typename... Types>
 inline constexpr bool contains_type_v = (std::same_as<T, Types> || ...);
 
 /// @brief Helper to check if all types in a pack are unique.
+/// @tparam Types The parameter pack to check for uniqueness.
 template <typename... Types>
 struct is_unique;
 
-/// @brief Base case for is_unique.
+/// @brief Base case for is_unique (empty pack is unique).
 template <>
 struct is_unique<> {
+    /// @brief Result of the uniqueness check.
     static constexpr bool value = true;
 };
 
 /// @brief Recursive case for is_unique.
+/// @tparam T The first type in the pack.
+/// @tparam Rest The remaining types in the pack.
 template <typename T, typename... Rest>
 struct is_unique<T, Rest...> {
+    /// @brief Result of the uniqueness check.
     static constexpr bool value = (!std::same_as<T, Rest> && ...) && is_unique<Rest...>::value;
 };
 
-/// @brief Helper to find the index of a type in a tuple.
+/// @brief Helper to find the compile-time index of a type in a tuple.
+/// @tparam T The type to find.
+/// @tparam Tuple The tuple type to search in.
 template <typename T, typename Tuple>
 struct index_of;
 
 /// @brief Specialization of index_of for std::tuple.
+/// @tparam T The type to find.
+/// @tparam Types The types contained in the tuple.
 template <typename T, typename... Types>
 struct index_of<T, std::tuple<Types...>> {
     static_assert(
         sizeof...(Types) > 0, "SoaTable must contain at least one registered column type."
     );
 
-    /// @brief Internal function to find the index.
+    /// @brief Internal function to find the index of type T in the pack.
+    /// @return The zero-based index of T, or sizeof...(Types) if not found.
     static consteval std::size_t value_of() {
         constexpr bool matches[] = {std::same_as<T, Types>...};
         for (std::size_t i = 0; i < sizeof...(Types); ++i) {
@@ -89,7 +103,7 @@ struct index_of<T, std::tuple<Types...>> {
         return sizeof...(Types);
     }
 
-    /// @brief The index of type T in Types....
+    /// @brief The compile-time index of type T in Types....
     static constexpr std::size_t value = value_of();
     static_assert(
         value < sizeof...(Types), "The requested type is not registered inside the SoaTable."
@@ -102,7 +116,7 @@ namespace detail {
 /// @brief Generates a mask with the specified number of low bits set.
 /// @tparam UInt The unsigned integer type.
 /// @param bits The number of bits to set.
-/// @return The generated mask.
+/// @return The generated mask with 'bits' low bits set.
 template <typename UInt>
 constexpr UInt low_bits_mask(std::size_t bits) {
     static_assert(std::is_unsigned_v<UInt>, "low_bits_mask requires an unsigned integer type.");
@@ -117,29 +131,44 @@ constexpr UInt low_bits_mask(std::size_t bits) {
 }
 
 /// @brief Helper to check if a type is an instance of std::optional.
+/// @tparam T The type to check.
 template <typename T>
 struct is_optional : std::false_type {};
 
+/// @brief Specialization for std::optional.
+/// @tparam T The underlying type.
 template <typename T>
 struct is_optional<std::optional<T>> : std::true_type {};
 
+/// @brief Helper boolean to check if a type is an instance of std::optional.
+/// @tparam T The type to check.
 template <typename T>
 inline constexpr bool is_optional_v = is_optional<T>::value;
 
 /// @brief Extracts the value type from a std::optional.
+/// @tparam T The type to extract from.
 template <typename T>
 struct optional_value_type {
+    /// @brief The extracted type.
     using type = T;
 };
 
+/// @brief Specialization for std::optional to extract its value type.
+/// @tparam T The underlying type.
 template <typename T>
 struct optional_value_type<std::optional<T>> {
+    /// @brief The extracted type.
     using type = T;
 };
 
+/// @brief Helper alias to extract the value type from a std::optional or the type itself.
+/// @tparam T The type to extract from.
 template <typename T>
 using optional_value_type_t = typename optional_value_type<T>::type;
 
+/// @brief The return type of a selection query.
+/// @tparam Self The SoaTable type (const or non-const).
+/// @tparam ReqColumns The requested column types.
 template <typename Self, typename... ReqColumns>
 using select_result_t = std::tuple<
     row_id,
@@ -191,12 +220,14 @@ struct quantized_float {
     /// @brief The maximum possible quantized value.
     static constexpr StorageType MaxVal = detail::low_bits_mask<StorageType>(Bits);
 
-    /// @brief Default constructor.
+    /// @brief Default constructor. Initializes the quantized value to zero.
     constexpr quantized_float() = default;
     /// @brief Construct from a double value.
+    /// @param value The floating-point value to quantize.
     constexpr quantized_float(double value) { set(value); }
 
     /// @brief Quantize and set the value.
+    /// @param value The floating-point value to quantize. Will be clamped to [Min, Max].
     constexpr void set(double value) {
         const double clamped    = std::clamp(value, Min, Max);
         const double normalized = (clamped - Min) / (Max - Min);
@@ -206,15 +237,19 @@ struct quantized_float {
     }
 
     /// @brief Dequantize and get the double value.
+    /// @return The dequantized double value.
     constexpr double get() const {
         return Min +
                (static_cast<double>(quantized_value) / static_cast<double>(MaxVal)) * (Max - Min);
     }
 
     /// @brief Implicit conversion to double.
+    /// @return The dequantized double value.
     constexpr operator double() const { return get(); }
 
     /// @brief Assignment from double.
+    /// @param value The floating-point value to quantize.
+    /// @return Reference to this object.
     constexpr quantized_float& operator=(double value) {
         set(value);
         return *this;
@@ -242,14 +277,18 @@ struct packed_bits {
     static constexpr ContainerType ValueMask =
         static_cast<ContainerType>(detail::low_bits_mask<ContainerType>(Bits) << Offset);
 
-    /// @brief Set the value in the container.
+    /// @brief Set the value in the container at the configured offset and width.
+    /// @param container The container integer to modify.
+    /// @param value The value to pack into the container.
     static constexpr void set(ContainerType& container, ValueType value) {
         container = static_cast<ContainerType>(
             (container & ~ValueMask) | ((static_cast<ContainerType>(value) << Offset) & ValueMask)
         );
     }
 
-    /// @brief Get the value from the container.
+    /// @brief Get the value from the container at the configured offset and width.
+    /// @param container The container integer to extract from.
+    /// @return The extracted value.
     static constexpr ValueType get(ContainerType container) {
         return static_cast<ValueType>((container & ValueMask) >> Offset);
     }
@@ -268,18 +307,23 @@ class DeltaValue {
     static constexpr double Scale = ScaleM1000 / 1000.0;
 
    public:
-    /// @brief Default constructor.
+    /// @brief Default constructor. Initializes the value to zero.
     constexpr DeltaValue() = default;
     /// @brief Construct with an initial value.
+    /// @param initial The initial absolute value.
     constexpr explicit DeltaValue(T initial) : m_value(initial) {}
 
     /// @brief Set the absolute value.
+    /// @param value The new absolute value.
     constexpr void set(T value) { m_value = value; }
 
     /// @brief Apply a delta to the current value.
+    /// @param delta The delta to apply, which will be multiplied by the scale.
     constexpr void apply_delta(DeltaType delta) { m_value += static_cast<T>(delta) * Scale; }
 
     /// @brief Calculate the best-fit delta for a new absolute value.
+    /// @param new_value The target absolute value.
+    /// @return The delta that, when applied, brings the current value closest to new_value.
     [[nodiscard]] DeltaType get_delta(T new_value) const {
         const T      diff      = new_value - m_value;
         const double scaled    = static_cast<double>(diff) / Scale;
@@ -291,8 +335,10 @@ class DeltaValue {
     }
 
     /// @brief Get the current absolute value.
+    /// @return The current value.
     [[nodiscard]] constexpr T get() const { return m_value; }
     /// @brief Implicit conversion to T.
+    /// @return The current value.
     constexpr operator T() const { return get(); }
 };
 
@@ -309,23 +355,29 @@ class DirtyMask {
 
    public:
     /// @brief Mark a flag as dirty.
+    /// @param flag The flag to set in the mask.
     constexpr void mark_dirty(EnumType flag) { m_mask |= static_cast<MaskType>(flag); }
 
     /// @brief Clear a dirty flag.
+    /// @param flag The flag to clear in the mask.
     constexpr void clear_dirty(EnumType flag) {
         m_mask &= static_cast<MaskType>(~static_cast<MaskType>(flag));
     }
 
     /// @brief Check if a flag is dirty.
+    /// @param flag The flag to check.
+    /// @return True if the flag is set, false otherwise.
     [[nodiscard]] constexpr bool is_dirty(EnumType flag) const {
         return (m_mask & static_cast<MaskType>(flag)) != 0;
     }
 
     /// @brief Check if any flags are dirty.
+    /// @return True if the mask is non-zero, false otherwise.
     [[nodiscard]] constexpr bool is_any_dirty() const { return m_mask != 0; }
-    /// @brief Reset all flags.
+    /// @brief Reset all flags to clean (zero).
     constexpr void reset() { m_mask = 0; }
     /// @brief Get the raw mask.
+    /// @return The underlying mask integer.
     [[nodiscard]] constexpr MaskType get_mask() const { return m_mask; }
 };
 
@@ -354,20 +406,21 @@ class ColumnVector {
     ColumnVector() = default;
 
     /// @brief Reserve capacity for the vectors.
+    /// @param capacity The number of elements to reserve space for.
     void reserve(std::size_t capacity) {
         m_sparse.reserve(capacity);
         m_dense.reserve(capacity);
         m_data.reserve(capacity);
     }
 
-    /// @brief Clear all data.
+    /// @brief Clear all data from the column.
     void clear() {
         m_sparse.clear();
         m_dense.clear();
         m_data.clear();
     }
 
-    /// @brief Shrink vectors to fit their current size.
+    /// @brief Shrink vectors to fit their current size, freeing unused memory.
     void shrink_to_fit() {
         m_sparse.shrink_to_fit();
         m_dense.shrink_to_fit();
@@ -375,11 +428,15 @@ class ColumnVector {
     }
 
     /// @brief Check if the column has a value for the given row index.
+    /// @param row_index The internal index of the row.
+    /// @return True if a value is present, false otherwise.
     [[nodiscard]] bool contains(std::uint32_t row_index) const {
         return row_index < m_sparse.size() && m_sparse[row_index] != tombstone;
     }
 
     /// @brief Try to get a pointer to the value at the given row index.
+    /// @param row_index The internal index of the row.
+    /// @return Pointer to the value, or nullptr if not present.
     [[nodiscard]] T* try_get(std::uint32_t row_index) {
         if (!contains(row_index)) {
             return nullptr;
@@ -388,6 +445,8 @@ class ColumnVector {
     }
 
     /// @brief Try to get a const pointer to the value at the given row index.
+    /// @param row_index The internal index of the row.
+    /// @return Const pointer to the value, or nullptr if not present.
     [[nodiscard]] const T* try_get(std::uint32_t row_index) const {
         if (!contains(row_index)) {
             return nullptr;
@@ -396,18 +455,26 @@ class ColumnVector {
     }
 
     /// @brief Get a reference to the value at the given row index. Asserts if not present.
+    /// @param row_index The internal index of the row.
+    /// @return Reference to the value.
     T& get(std::uint32_t row_index) {
         assert(contains(row_index) && "Out of bounds sparse column reference.");
         return m_data[static_cast<std::size_t>(m_sparse[row_index])];
     }
 
     /// @brief Get a const reference to the value at the given row index. Asserts if not present.
+    /// @param row_index The internal index of the row.
+    /// @return Const reference to the value.
     const T& get(std::uint32_t row_index) const {
         assert(contains(row_index) && "Out of bounds sparse column reference.");
         return m_data[static_cast<std::size_t>(m_sparse[row_index])];
     }
 
     /// @brief Emplace a value at the given row index.
+    /// @tparam Args Argument types for the constructor of T.
+    /// @param row_index The internal index of the row.
+    /// @param args Arguments to pass to the constructor of T.
+    /// @return Reference to the emplaced value.
     template <typename... Args>
     T& emplace(std::uint32_t row_index, Args&&... args) {
         if (row_index >= m_sparse.size()) {
@@ -427,6 +494,7 @@ class ColumnVector {
     }
 
     /// @brief Remove the value at the given row index.
+    /// @param row_index The internal index of the row.
     void remove(std::uint32_t row_index) {
         if (!contains(row_index)) {
             return;
@@ -448,6 +516,7 @@ class ColumnVector {
     }
 
     /// @brief Physically reorder the dense storage based on a new row order.
+    /// @param row_order The new order of row indices.
     void reorder(const std::vector<std::uint32_t>& row_order) {
         std::vector<T>             new_data;
         std::vector<std::uint32_t> new_dense;
@@ -584,6 +653,7 @@ class SoaTable {
     [[nodiscard]] bool empty() const noexcept { return m_alive_count == 0; }
 
     /// @brief Reserve capacity for rows and columns.
+    /// @param capacity The number of rows to reserve space for.
     void reserve(std::size_t capacity) {
         m_rows.reserve(capacity);
         m_free_links.reserve(capacity);
@@ -607,6 +677,7 @@ class SoaTable {
     }
 
     /// @brief Insert a new empty row and return its ID.
+    /// @return The row_id of the newly created row.
     [[nodiscard]] row_id insert() {
         std::uint32_t index = 0;
         if (m_free_head != npos) {
@@ -629,6 +700,8 @@ class SoaTable {
     }
 
     /// @brief Check if a row_id is still valid and alive.
+    /// @param id The row_id to check.
+    /// @return True if the row is valid and alive, false otherwise.
     [[nodiscard]] bool is_valid(row_id id) const noexcept {
         if (id.index >= m_rows.size()) {
             return false;
@@ -638,6 +711,7 @@ class SoaTable {
     }
 
     /// @brief Erase a row by ID.
+    /// @param id The row_id of the row to erase.
     void erase(row_id id) {
         if (!is_valid(id)) {
             return;
@@ -664,6 +738,11 @@ class SoaTable {
     }
 
     /// @brief Assign a value to a column for the given row.
+    /// @tparam T The type of the column.
+    /// @tparam Args Argument types for the constructor of T.
+    /// @param id The row_id of the row.
+    /// @param args Arguments to pass to the constructor of T.
+    /// @return Reference to the assigned value.
     template <typename T, typename... Args>
         requires registered_column_v<T>
     T& assign(row_id id, Args&&... args) {
@@ -678,6 +757,8 @@ class SoaTable {
     }
 
     /// @brief Remove a value from a column for the given row.
+    /// @tparam T The type of the column.
+    /// @param id The row_id of the row.
     template <typename T>
         requires registered_column_v<T>
     void unassign(row_id id) {
@@ -691,6 +772,9 @@ class SoaTable {
     }
 
     /// @brief Check if a row has a value for the specified column.
+    /// @tparam T The type of the column.
+    /// @param id The row_id of the row.
+    /// @return True if the row has the column, false otherwise.
     template <typename T>
         requires registered_column_v<T>
     [[nodiscard]] bool contains(row_id id) const {
@@ -701,6 +785,9 @@ class SoaTable {
     }
 
     /// @brief Try to get a pointer to the value of a column for the given row.
+    /// @tparam T The type of the column.
+    /// @param id The row_id of the row.
+    /// @return Pointer to the value, or nullptr if not present or row is invalid.
     template <typename T>
         requires registered_column_v<T>
     T* try_get(row_id id) {
@@ -711,6 +798,9 @@ class SoaTable {
     }
 
     /// @brief Try to get a const pointer to the value of a column for the given row.
+    /// @tparam T The type of the column.
+    /// @param id The row_id of the row.
+    /// @return Const pointer to the value, or nullptr if not present or row is invalid.
     template <typename T>
         requires registered_column_v<T>
     const T* try_get(row_id id) const {
@@ -721,6 +811,10 @@ class SoaTable {
     }
 
     /// @brief Get a reference to the value of a column for the given row. Throws if not present.
+    /// @tparam T The type of the column.
+    /// @param id The row_id of the row.
+    /// @return Reference to the value.
+    /// @throws std::out_of_range If the column is not present on the row.
     template <typename T>
         requires registered_column_v<T>
     T& get(row_id id) {
@@ -733,6 +827,10 @@ class SoaTable {
 
     /// @brief Get a const reference to the value of a column for the given row. Throws if not
     /// present.
+    /// @tparam T The type of the column.
+    /// @param id The row_id of the row.
+    /// @return Const reference to the value.
+    /// @throws std::out_of_range If the column is not present on the row.
     template <typename T>
         requires registered_column_v<T>
     const T& get(row_id id) const {
@@ -749,6 +847,8 @@ class SoaTable {
     [[nodiscard]] auto rows() const { return rows_impl(this); }
 
     /// @brief Execute a function for each alive row ID.
+    /// @tparam Func The type of the function to execute.
+    /// @param func The function to execute. It must accept a row_id.
     template <typename Func>
     void for_each_row(Func&& func) {
         for (row_id id : rows()) {
@@ -757,6 +857,8 @@ class SoaTable {
     }
 
     /// @brief Execute a function for each alive row ID (const).
+    /// @tparam Func The type of the function to execute.
+    /// @param func The function to execute. It must accept a row_id.
     template <typename Func>
     void for_each_row(Func&& func) const {
         for (row_id id : rows()) {
@@ -765,8 +867,8 @@ class SoaTable {
     }
 
     /// @brief Select rows that have all specified columns and provide access to them.
-    ///
-    /// Returns a range of tuples containing (row_id, std::reference_wrapper<ReqColumns>...).
+    /// @tparam ReqColumns The requested column types. Use std::optional<T> for optional columns.
+    /// @return A range of tuples containing (row_id, reference-wrapped columns...).
     template <typename... ReqColumns>
     auto select() {
         static_assert(
@@ -825,7 +927,9 @@ class SoaTable {
         }
     }
 
-    /// @brief Select rows that have all specified columns (const).
+    /// @brief Select rows that have all specified columns (const version).
+    /// @tparam ReqColumns The requested column types. Use std::optional<T> for optional columns.
+    /// @return A range of tuples containing (row_id, reference-wrapped const columns...).
     template <typename... ReqColumns>
     auto select() const {
         static_assert(
@@ -884,8 +988,8 @@ class SoaTable {
         }
     }
 
-    /// @brief Fast batch insertion of rows.
-    /// @param count Number of rows to insert.
+    /// @brief Fast batch insertion of multiple rows.
+    /// @param count The number of rows to insert.
     /// @return A vector of newly created row_ids.
     std::vector<row_id> insert_batch(std::size_t count) {
         std::vector<row_id> ids;
@@ -897,6 +1001,10 @@ class SoaTable {
     }
 
     /// @brief Fast batch assignment for a single column.
+    /// @tparam T The type of the column.
+    /// @tparam InputIt The type of the input iterator.
+    /// @param ids A vector of row_ids to assign values to.
+    /// @param first The start of the range of values to assign.
     template <typename T, typename InputIt>
         requires registered_column_v<T>
     void assign_batch(const std::vector<row_id>& ids, InputIt first) {
@@ -913,6 +1021,8 @@ class SoaTable {
 
     /// @brief Multi-column sorting. Physically reorders all columns based on multiple comparison
     /// criteria.
+    /// @tparam SortCriteria The types of the comparison criteria.
+    /// @param criteria The comparison criteria. Each should be a pair of (ColumnType, Comparator).
     template <typename... SortCriteria>
     void sort_by_multi(SortCriteria&&... criteria) {
         // Find smallest driver if possible, otherwise use all alive rows
@@ -963,6 +1073,9 @@ class SoaTable {
     }
 
     /// @brief Physically reorder all columns based on the sorted order of one column.
+    /// @tparam T The type of the column to sort by.
+    /// @tparam Compare The type of the comparator.
+    /// @param comp The comparator to use for sorting values of type T.
     template <typename T, typename Compare>
         requires registered_column_v<T>
     void sort_by_column(Compare&& comp) {
@@ -986,7 +1099,11 @@ class SoaTable {
         sort_by_column<T>(std::forward<Compare>(comp));
     }
 
-    /// @brief Parallel version of sort_by_column. Reorders columns in parallel.
+    /// @brief Parallel version of sort_by_column. Reorders columns in parallel to speed up the
+    /// process.
+    /// @tparam T The type of the column to sort by.
+    /// @tparam Compare The type of the comparator.
+    /// @param comp The comparator to use for sorting values of type T.
     template <typename T, typename Compare>
         requires registered_column_v<T>
     void sort_by_column_parallel(Compare&& comp) {
@@ -1046,9 +1163,11 @@ struct RowHandle {
     /// @brief Pointer to the table containing the row.
     SoaTable<RegisteredColumns...>* table = nullptr;
 
-    /// @brief Default constructor.
+    /// @brief Default constructor. Creates an unbound and invalid handle.
     constexpr RowHandle() = default;
     /// @brief Construct from a row_id and table reference.
+    /// @param row The row_id to wrap.
+    /// @param table_ref The table that contains the row.
     constexpr RowHandle(row_id row, SoaTable<RegisteredColumns...>& table_ref)
         : id(row), table(&table_ref) {}
 
@@ -1077,48 +1196,66 @@ struct RowHandle {
     explicit operator bool() const { return is_valid(); }
 
     /// @brief Assign a value to a column for this row.
+    /// @tparam T The type of the column.
+    /// @tparam Args Argument types for the constructor of T.
+    /// @param args Arguments to pass to the constructor of T.
+    /// @return Reference to the assigned value.
     template <typename T, typename... Args>
     T& assign(Args&&... args) {
         return require_table().template assign<T>(id, std::forward<Args>(args)...);
     }
 
     /// @brief Remove a value from a column for this row.
+    /// @tparam T The type of the column.
     template <typename T>
     void unassign() {
         require_table().template unassign<T>(id);
     }
 
     /// @brief Check if this row has a value for the specified column.
+    /// @tparam T The type of the column.
+    /// @return True if the row has the column, false otherwise.
     template <typename T>
     [[nodiscard]] bool contains() const {
         return require_table().template contains<T>(id);
     }
 
     /// @brief Get a reference to a column's value. Throws if not present.
+    /// @tparam T The type of the column.
+    /// @return Reference to the value.
+    /// @throws std::out_of_range If the column is not present on the row.
     template <typename T>
     T& get() {
         return require_table().template get<T>(id);
     }
 
     /// @brief Get a const reference to a column's value. Throws if not present.
+    /// @tparam T The type of the column.
+    /// @return Const reference to the value.
+    /// @throws std::out_of_range If the column is not present on the row.
     template <typename T>
     const T& get() const {
         return require_table().template get<T>(id);
     }
 
     /// @brief Try to get a pointer to a column's value.
+    /// @tparam T The type of the column.
+    /// @return Pointer to the value, or nullptr if not present.
     template <typename T>
     T* try_get() {
         return require_table().template try_get<T>(id);
     }
 
     /// @brief Try to get a const pointer to a column's value.
+    /// @tparam T The type of the column.
+    /// @return Const pointer to the value, or nullptr if not present.
     template <typename T>
     const T* try_get() const {
         return require_table().template try_get<T>(id);
     }
 
     /// @brief Erase this row from the table.
+    /// @return True if the row was successfully erased, false if it was already invalid.
     bool erase() {
         if (!is_valid()) {
             return false;
