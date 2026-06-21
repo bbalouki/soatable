@@ -1,9 +1,16 @@
-add_executable(soatable_benchmark soatable_benchmark.cpp)
-target_compile_features(soatable_benchmark PRIVATE cxx_std_20)
+find_package(benchmark CONFIG QUIET)
 
-if(NOT TARGET soatable::soatable)
-  find_package(soatable CONFIG REQUIRED)
+if(NOT benchmark_FOUND)
+    include(FetchContent)
+    FetchContent_Declare(
+        benchmark
+        GIT_REPOSITORY https://github.com/google/benchmark.git
+        GIT_TAG        v1.9.5
+    )
+    set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+    set(BENCHMARK_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(benchmark)
 endif()
 
-target_link_libraries(soatable_benchmark PRIVATE soatable::soatable)
-
+add_executable(soatable_benchmark soatable_benchmark.cpp)
+target_link_libraries(soatable_benchmark PRIVATE soatable::soatable benchmark::benchmark)

@@ -9,7 +9,9 @@
 #include <cstdint>
 #include <functional>
 #include <future>
+#include <iostream>
 #include <limits>
+#include <optional>
 #include <ranges>
 #include <stdexcept>
 #include <tuple>
@@ -17,763 +19,1116 @@
 #include <utility>
 #include <vector>
 
-namespace sstd {
+#if __has_include(<print>)
+#include <print>
+#define SOATABLE_HAS_PRINT 1
+#else
+#define SOATABLE_HAS_PRINT 0
+#endif
 
-// ============================================================================
+/// @brief The main namespace for the SoaTable library.
+namespace soatable {
+
+// =========================================
 // 1. Stable row identity and type helpers
-// ============================================================================
+// =========================================
 
+/// @brief A stable identifier for a row in an SoaTable.
+///
+/// Contains an index into the row metadata and a generation count to prevent
+/// the ABA problem (referencing a new row with an old handle).
 struct row_id {
-  std::uint32_t index = 0;
-  std::uint32_t generation = 0;
+    /// @brief The index of the row in the table.
+    std::uint32_t index = 0;
+    /// @brief The generation of the row at this index.
+    std::uint32_t generation = 0;
 
-  constexpr bool operator==(const row_id&) const = default;
+    /// @brief Default equality operator.
+    constexpr bool operator==(const row_id&) const = default;
 };
 
+/// @brief Helper concept to check if a type is present in a parameter pack.
 template <typename T, typename... Types>
 inline constexpr bool contains_type_v = (std::same_as<T, Types> || ...);
 
+/// @brief Helper to check if all types in a pack are unique.
 template <typename... Types>
 struct is_unique;
 
+/// @brief Base case for is_unique.
 template <>
 struct is_unique<> {
-  static constexpr bool value = true;
+    static constexpr bool value = true;
 };
 
+/// @brief Recursive case for is_unique.
 template <typename T, typename... Rest>
 struct is_unique<T, Rest...> {
-  static constexpr bool value =
-      (!std::same_as<T, Rest> && ...) && is_unique<Rest...>::value;
+    static constexpr bool value = (!std::same_as<T, Rest> && ...) && is_unique<Rest...>::value;
 };
 
+/// @brief Helper to find the index of a type in a tuple.
 template <typename T, typename Tuple>
 struct index_of;
 
+/// @brief Specialization of index_of for std::tuple.
 template <typename T, typename... Types>
 struct index_of<T, std::tuple<Types...>> {
-  static_assert(sizeof...(Types) > 0,
-                "soa_table must contain at least one registered column type.");
+    static_assert(
+        sizeof...(Types) > 0, "SoaTable must contain at least one registered column type."
+    );
 
-  static consteval std::size_t value_of() {
-    constexpr bool matches[] = {std::same_as<T, Types>...};
-    for (std::size_t i = 0; i < sizeof...(Types); ++i) {
-      if (matches[i]) {
-        return i;
-      }
+    /// @brief Internal function to find the index.
+    static consteval std::size_t value_of() {
+        constexpr bool matches[] = {std::same_as<T, Types>...};
+        for (std::size_t i = 0; i < sizeof...(Types); ++i) {
+            if (matches[i]) {
+                return i;
+            }
+        }
+        return sizeof...(Types);
     }
-    return sizeof...(Types);
-  }
 
-  static constexpr std::size_t value = value_of();
-  static_assert(value < sizeof...(Types),
-                "The requested type is not registered inside the soa_table.");
+    /// @brief The index of type T in Types....
+    static constexpr std::size_t value = value_of();
+    static_assert(
+        value < sizeof...(Types), "The requested type is not registered inside the SoaTable."
+    );
 };
 
+/// @brief Detail namespace for internal implementation details.
 namespace detail {
 
+/// @brief Generates a mask with the specified number of low bits set.
+/// @tparam UInt The unsigned integer type.
+/// @param bits The number of bits to set.
+/// @return The generated mask.
 template <typename UInt>
 constexpr UInt low_bits_mask(std::size_t bits) {
-  static_assert(std::is_unsigned_v<UInt>,
-                "low_bits_mask requires an unsigned integer type.");
-  constexpr std::size_t digits = std::numeric_limits<UInt>::digits;
-  if (bits >= digits) {
-    return static_cast<UInt>(~UInt{0});
-  }
-  if (bits == 0) {
-    return UInt{0};
-  }
-  return static_cast<UInt>((UInt{1} << bits) - UInt{1});
+    static_assert(std::is_unsigned_v<UInt>, "low_bits_mask requires an unsigned integer type.");
+    constexpr std::size_t digits = std::numeric_limits<UInt>::digits;
+    if (bits >= digits) {
+        return static_cast<UInt>(~UInt {0});
+    }
+    if (bits == 0) {
+        return UInt {0};
+    }
+    return static_cast<UInt>((UInt {1} << bits) - UInt {1});
 }
 
+/// @brief Helper to check if a type is an instance of std::optional.
+template <typename T>
+struct is_optional : std::false_type {};
+
+template <typename T>
+struct is_optional<std::optional<T>> : std::true_type {};
+
+template <typename T>
+inline constexpr bool is_optional_v = is_optional<T>::value;
+
+/// @brief Extracts the value type from a std::optional.
+template <typename T>
+struct optional_value_type {
+    using type = T;
+};
+
+template <typename T>
+struct optional_value_type<std::optional<T>> {
+    using type = T;
+};
+
+template <typename T>
+using optional_value_type_t = typename optional_value_type<T>::type;
+
 template <typename Self, typename... ReqColumns>
-using select_row_t =
-    std::tuple<row_id, std::conditional_t<std::is_const_v<Self>,
-                                          const ReqColumns&, ReqColumns&>...>;
+using select_result_t = std::tuple<
+    row_id,
+    std::conditional_t<
+        is_optional_v<ReqColumns>,
+        std::optional<std::reference_wrapper<std::conditional_t<
+            std::is_const_v<Self>,
+            const optional_value_type_t<ReqColumns>,
+            optional_value_type_t<ReqColumns>>>>,
+        std::reference_wrapper<std::conditional_t<
+            std::is_const_v<Self>,
+            const optional_value_type_t<ReqColumns>,
+            optional_value_type_t<ReqColumns>>>>...>;
 
 }  // namespace detail
 
-// ============================================================================
+// =================================
 // 2. Compression and state helpers
-// ============================================================================
+// =================================
 
-template <typename StorageType = std::uint16_t, int MinM1000 = 0,
-          int MaxM1000 = 1000000, std::size_t Bits = 16>
-requires std::is_unsigned_v<StorageType>
+/// @brief A helper to store a floating-point value in a quantized integer format.
+/// @tparam StorageType The unsigned integer type used for storage.
+/// @tparam MinM1000 The minimum value multiplied by 1000.
+/// @tparam MaxM1000 The maximum value multiplied by 1000.
+/// @tparam Bits The number of bits to use for quantization.
+template <
+    typename StorageType = std::uint16_t,
+    int         MinM1000 = 0,
+    int         MaxM1000 = 1000000,
+    std::size_t Bits     = 16>
+    requires std::is_unsigned_v<StorageType>
 struct quantized_float {
-  static_assert(Bits > 0, "quantized_float requires at least one bit.");
-  static_assert(Bits <= std::numeric_limits<StorageType>::digits,
-                "Bits cannot exceed the storage type width.");
-  static_assert(MaxM1000 > MinM1000,
-                "quantized_float requires MaxM1000 to be greater than MinM1000.");
+    static_assert(Bits > 0, "quantized_float requires at least one bit.");
+    static_assert(
+        Bits <= std::numeric_limits<StorageType>::digits,
+        "Bits cannot exceed the storage type width."
+    );
+    static_assert(
+        MaxM1000 > MinM1000, "quantized_float requires MaxM1000 to be greater than MinM1000."
+    );
 
-  StorageType quantized_value = 0;
+    /// @brief The underlying quantized integer value.
+    StorageType quantized_value = 0;
 
-  static constexpr double Min = MinM1000 / 1000.0;
-  static constexpr double Max = MaxM1000 / 1000.0;
-  static constexpr StorageType MaxVal =
-      detail::low_bits_mask<StorageType>(Bits);
+    /// @brief The minimum representable value.
+    static constexpr double Min = MinM1000 / 1000.0;
+    /// @brief The maximum representable value.
+    static constexpr double Max = MaxM1000 / 1000.0;
+    /// @brief The maximum possible quantized value.
+    static constexpr StorageType MaxVal = detail::low_bits_mask<StorageType>(Bits);
 
-  constexpr quantized_float() = default;
-  constexpr quantized_float(double value) { set(value); }
+    /// @brief Default constructor.
+    constexpr quantized_float() = default;
+    /// @brief Construct from a double value.
+    constexpr quantized_float(double value) { set(value); }
 
-  constexpr void set(double value) {
-    const double clamped = std::clamp(value, Min, Max);
-    const double normalized = (clamped - Min) / (Max - Min);
-    const auto quantized = static_cast<StorageType>(
-        normalized * static_cast<double>(MaxVal) + 0.5);
-    quantized_value = std::min(quantized, MaxVal);
-  }
+    /// @brief Quantize and set the value.
+    constexpr void set(double value) {
+        const double clamped    = std::clamp(value, Min, Max);
+        const double normalized = (clamped - Min) / (Max - Min);
+        const auto   quantized =
+            static_cast<StorageType>(normalized * static_cast<double>(MaxVal) + 0.5);
+        quantized_value = std::min(quantized, MaxVal);
+    }
 
-  constexpr double get() const {
-    return Min + (static_cast<double>(quantized_value) /
-                  static_cast<double>(MaxVal)) *
-                     (Max - Min);
-  }
+    /// @brief Dequantize and get the double value.
+    constexpr double get() const {
+        return Min +
+               (static_cast<double>(quantized_value) / static_cast<double>(MaxVal)) * (Max - Min);
+    }
 
-  constexpr operator double() const { return get(); }
+    /// @brief Implicit conversion to double.
+    constexpr operator double() const { return get(); }
 
-  constexpr quantized_float& operator=(double value) {
-    set(value);
-    return *this;
-  }
+    /// @brief Assignment from double.
+    constexpr quantized_float& operator=(double value) {
+        set(value);
+        return *this;
+    }
 };
 
-template <typename ContainerType, typename ValueType, std::size_t Offset,
-          std::size_t Bits>
-requires std::is_unsigned_v<ContainerType>
+/// @brief A helper to pack multiple small values into a single integer.
+/// @tparam ContainerType The unsigned integer type used as the container.
+/// @tparam ValueType The type of the value being packed.
+/// @tparam Offset The bit offset in the container.
+/// @tparam Bits The number of bits for the value.
+template <typename ContainerType, typename ValueType, std::size_t Offset, std::size_t Bits>
+    requires std::is_unsigned_v<ContainerType>
 struct packed_bits {
-  static_assert(Bits > 0, "packed_bits requires at least one bit.");
-  static_assert(Offset < std::numeric_limits<ContainerType>::digits,
-                "Offset exceeds the container width.");
-  static_assert(Offset + Bits <= std::numeric_limits<ContainerType>::digits,
-                "Offset + Bits cannot exceed the container width.");
+    static_assert(Bits > 0, "packed_bits requires at least one bit.");
+    static_assert(
+        Offset < std::numeric_limits<ContainerType>::digits, "Offset exceeds the container width."
+    );
+    static_assert(
+        Offset + Bits <= std::numeric_limits<ContainerType>::digits,
+        "Offset + Bits cannot exceed the container width."
+    );
 
-  static constexpr ContainerType ValueMask =
-      static_cast<ContainerType>(detail::low_bits_mask<ContainerType>(Bits)
-                                 << Offset);
+    /// @brief Bitmask for the value within the container.
+    static constexpr ContainerType ValueMask =
+        static_cast<ContainerType>(detail::low_bits_mask<ContainerType>(Bits) << Offset);
 
-  static constexpr void set(ContainerType& container, ValueType value) {
-    container = static_cast<ContainerType>((container & ~ValueMask) |
-                                           ((static_cast<ContainerType>(value)
-                                             << Offset) &
-                                            ValueMask));
-  }
+    /// @brief Set the value in the container.
+    static constexpr void set(ContainerType& container, ValueType value) {
+        container = static_cast<ContainerType>(
+            (container & ~ValueMask) | ((static_cast<ContainerType>(value) << Offset) & ValueMask)
+        );
+    }
 
-  static constexpr ValueType get(ContainerType container) {
-    return static_cast<ValueType>((container & ValueMask) >> Offset);
-  }
+    /// @brief Get the value from the container.
+    static constexpr ValueType get(ContainerType container) {
+        return static_cast<ValueType>((container & ValueMask) >> Offset);
+    }
 };
 
-template <typename T = double, typename DeltaType = std::int16_t,
-          int ScaleM1000 = 10>
-class delta_value {
-  static_assert(ScaleM1000 > 0, "delta_value requires a positive scale.");
+/// @brief Tracks a value relative to a baseline, using a scaled delta.
+/// @tparam T The type of the value (usually float or double).
+/// @tparam DeltaType The type used for the delta (e.g., int16_t).
+/// @tparam ScaleM1000 The scale factor multiplied by 1000.
+template <typename T = double, typename DeltaType = std::int16_t, int ScaleM1000 = 10>
+class DeltaValue {
+    static_assert(ScaleM1000 > 0, "DeltaValue requires a positive scale.");
 
- private:
-  T m_value{};
-  static constexpr double Scale = ScaleM1000 / 1000.0;
+   private:
+    T                       m_value {};
+    static constexpr double Scale = ScaleM1000 / 1000.0;
 
- public:
-  constexpr delta_value() = default;
-  constexpr explicit delta_value(T initial) : m_value(initial) {}
+   public:
+    /// @brief Default constructor.
+    constexpr DeltaValue() = default;
+    /// @brief Construct with an initial value.
+    constexpr explicit DeltaValue(T initial) : m_value(initial) {}
 
-  constexpr void set(T value) { m_value = value; }
+    /// @brief Set the absolute value.
+    constexpr void set(T value) { m_value = value; }
 
-  constexpr void apply_delta(DeltaType delta) {
-    m_value += static_cast<T>(delta) * Scale;
-  }
+    /// @brief Apply a delta to the current value.
+    constexpr void apply_delta(DeltaType delta) { m_value += static_cast<T>(delta) * Scale; }
 
-  [[nodiscard]] DeltaType get_delta(T new_value) const {
-    const T diff = new_value - m_value;
-    const double scaled = static_cast<double>(diff) / Scale;
-    const double rounded = scaled >= 0.0 ? std::floor(scaled + 0.5)
-                                          : std::ceil(scaled - 0.5);
-    const auto min_value = static_cast<double>(std::numeric_limits<DeltaType>::min());
-    const auto max_value = static_cast<double>(std::numeric_limits<DeltaType>::max());
-    const double clamped = std::clamp(rounded, min_value, max_value);
-    return static_cast<DeltaType>(clamped);
-  }
+    /// @brief Calculate the best-fit delta for a new absolute value.
+    [[nodiscard]] DeltaType get_delta(T new_value) const {
+        const T      diff      = new_value - m_value;
+        const double scaled    = static_cast<double>(diff) / Scale;
+        const double rounded   = scaled >= 0.0 ? std::floor(scaled + 0.5) : std::ceil(scaled - 0.5);
+        const auto   min_value = static_cast<double>(std::numeric_limits<DeltaType>::min());
+        const auto   max_value = static_cast<double>(std::numeric_limits<DeltaType>::max());
+        const double clamped   = std::clamp(rounded, min_value, max_value);
+        return static_cast<DeltaType>(clamped);
+    }
 
-  [[nodiscard]] constexpr T get() const { return m_value; }
-  constexpr operator T() const { return get(); }
+    /// @brief Get the current absolute value.
+    [[nodiscard]] constexpr T get() const { return m_value; }
+    /// @brief Implicit conversion to T.
+    constexpr operator T() const { return get(); }
 };
 
+/// @brief Manages a set of dirty flags efficiently.
+/// @tparam EnumType The enum type defining the flags.
+/// @tparam MaskType The unsigned integer type used for the mask.
 template <typename EnumType, typename MaskType = std::uint32_t>
-requires std::is_enum_v<EnumType>
-class dirty_mask {
-  static_assert(std::is_unsigned_v<MaskType>,
-                "dirty_mask requires an unsigned mask type.");
+    requires std::is_enum_v<EnumType>
+class DirtyMask {
+    static_assert(std::is_unsigned_v<MaskType>, "DirtyMask requires an unsigned mask type.");
 
- private:
-  MaskType m_mask = 0;
+   private:
+    MaskType m_mask = 0;
 
- public:
-  constexpr void mark_dirty(EnumType flag) {
-    m_mask |= static_cast<MaskType>(flag);
-  }
+   public:
+    /// @brief Mark a flag as dirty.
+    constexpr void mark_dirty(EnumType flag) { m_mask |= static_cast<MaskType>(flag); }
 
-  constexpr void clear_dirty(EnumType flag) {
-    m_mask &= static_cast<MaskType>(~static_cast<MaskType>(flag));
-  }
+    /// @brief Clear a dirty flag.
+    constexpr void clear_dirty(EnumType flag) {
+        m_mask &= static_cast<MaskType>(~static_cast<MaskType>(flag));
+    }
 
-  [[nodiscard]] constexpr bool is_dirty(EnumType flag) const {
-    return (m_mask & static_cast<MaskType>(flag)) != 0;
-  }
+    /// @brief Check if a flag is dirty.
+    [[nodiscard]] constexpr bool is_dirty(EnumType flag) const {
+        return (m_mask & static_cast<MaskType>(flag)) != 0;
+    }
 
-  [[nodiscard]] constexpr bool is_any_dirty() const { return m_mask != 0; }
-  constexpr void reset() { m_mask = 0; }
-  [[nodiscard]] constexpr MaskType get_mask() const { return m_mask; }
+    /// @brief Check if any flags are dirty.
+    [[nodiscard]] constexpr bool is_any_dirty() const { return m_mask != 0; }
+    /// @brief Reset all flags.
+    constexpr void reset() { m_mask = 0; }
+    /// @brief Get the raw mask.
+    [[nodiscard]] constexpr MaskType get_mask() const { return m_mask; }
 };
 
-// ============================================================================
+// =========================
 // 3. Sparse column storage
-// ============================================================================
+// =========================
 
+/// @brief A sparse-to-dense storage for a single column.
+///
+/// Uses a sparse array (mapping row index to dense index) and a dense array
+/// (storing the actual data and the back-mapping to row index).
+/// This allows for O(1) insertion, deletion, and iteration over present values.
 template <typename T>
-class column_vector {
- private:
-  static constexpr std::int32_t tombstone = -1;
-  std::vector<std::int32_t> m_sparse;
-  std::vector<std::uint32_t> m_dense;
-  std::vector<T> m_data;
+class ColumnVector {
+   private:
+    static constexpr std::int32_t tombstone = -1;
+    /// @brief Maps row_index -> dense_index.
+    std::vector<std::int32_t> m_sparse;
+    /// @brief Maps dense_index -> row_index.
+    std::vector<std::uint32_t> m_dense;
+    /// @brief The actual data stored densely.
+    std::vector<T> m_data;
 
- public:
-  column_vector() = default;
+   public:
+    /// @brief Default constructor.
+    ColumnVector() = default;
 
-  void reserve(std::size_t capacity) {
-    m_sparse.reserve(capacity);
-    m_dense.reserve(capacity);
-    m_data.reserve(capacity);
-  }
-
-  void clear() {
-    m_sparse.clear();
-    m_dense.clear();
-    m_data.clear();
-  }
-
-  void shrink_to_fit() {
-    m_sparse.shrink_to_fit();
-    m_dense.shrink_to_fit();
-    m_data.shrink_to_fit();
-  }
-
-  [[nodiscard]] bool contains(std::uint32_t row_index) const {
-    return row_index < m_sparse.size() && m_sparse[row_index] != tombstone;
-  }
-
-  [[nodiscard]] T* try_get(std::uint32_t row_index) {
-    if (!contains(row_index)) {
-      return nullptr;
-    }
-    return &m_data[static_cast<std::size_t>(m_sparse[row_index])];
-  }
-
-  [[nodiscard]] const T* try_get(std::uint32_t row_index) const {
-    if (!contains(row_index)) {
-      return nullptr;
-    }
-    return &m_data[static_cast<std::size_t>(m_sparse[row_index])];
-  }
-
-  T& get(std::uint32_t row_index) {
-    assert(contains(row_index) && "Out of bounds sparse column reference.");
-    return m_data[static_cast<std::size_t>(m_sparse[row_index])];
-  }
-
-  const T& get(std::uint32_t row_index) const {
-    assert(contains(row_index) && "Out of bounds sparse column reference.");
-    return m_data[static_cast<std::size_t>(m_sparse[row_index])];
-  }
-
-  template <typename... Args>
-  T& emplace(std::uint32_t row_index, Args&&... args) {
-    if (row_index >= m_sparse.size()) {
-      m_sparse.resize(static_cast<std::size_t>(row_index) + 1, tombstone);
+    /// @brief Reserve capacity for the vectors.
+    void reserve(std::size_t capacity) {
+        m_sparse.reserve(capacity);
+        m_dense.reserve(capacity);
+        m_data.reserve(capacity);
     }
 
-    if (m_sparse[row_index] != tombstone) {
-      const std::size_t dense_index = static_cast<std::size_t>(m_sparse[row_index]);
-      m_data[dense_index] = T(std::forward<Args>(args)...);
-      return m_data[dense_index];
+    /// @brief Clear all data.
+    void clear() {
+        m_sparse.clear();
+        m_dense.clear();
+        m_data.clear();
     }
 
-    m_sparse[row_index] = static_cast<std::int32_t>(m_dense.size());
-    m_dense.push_back(row_index);
-    m_data.emplace_back(std::forward<Args>(args)...);
-    return m_data.back();
-  }
-
-  void remove(std::uint32_t row_index) {
-    if (!contains(row_index)) {
-      return;
+    /// @brief Shrink vectors to fit their current size.
+    void shrink_to_fit() {
+        m_sparse.shrink_to_fit();
+        m_dense.shrink_to_fit();
+        m_data.shrink_to_fit();
     }
 
-    const std::size_t dense_index = static_cast<std::size_t>(m_sparse[row_index]);
-    const std::uint32_t last_row_index = m_dense.back();
-
-    std::swap(m_data[dense_index], m_data.back());
-    std::swap(m_dense[dense_index], m_dense.back());
-
-    m_sparse[last_row_index] = static_cast<std::int32_t>(dense_index);
-    m_sparse[row_index] = tombstone;
-
-    m_data.pop_back();
-    m_dense.pop_back();
-  }
-
-  void reorder(const std::vector<std::uint32_t>& row_order) {
-    std::vector<T> new_data;
-    std::vector<std::uint32_t> new_dense;
-    new_data.reserve(m_data.size());
-    new_dense.reserve(m_dense.size());
-
-    for (const std::uint32_t row_index : row_order) {
-      if (contains(row_index)) {
-        new_data.push_back(std::move(get(row_index)));
-        new_dense.push_back(row_index);
-      }
+    /// @brief Check if the column has a value for the given row index.
+    [[nodiscard]] bool contains(std::uint32_t row_index) const {
+        return row_index < m_sparse.size() && m_sparse[row_index] != tombstone;
     }
 
-    std::fill(m_sparse.begin(), m_sparse.end(), tombstone);
-    for (std::size_t i = 0; i < new_dense.size(); ++i) {
-      m_sparse[new_dense[i]] = static_cast<std::int32_t>(i);
+    /// @brief Try to get a pointer to the value at the given row index.
+    [[nodiscard]] T* try_get(std::uint32_t row_index) {
+        if (!contains(row_index)) {
+            return nullptr;
+        }
+        return &m_data[static_cast<std::size_t>(m_sparse[row_index])];
     }
 
-    m_data = std::move(new_data);
-    m_dense = std::move(new_dense);
-  }
+    /// @brief Try to get a const pointer to the value at the given row index.
+    [[nodiscard]] const T* try_get(std::uint32_t row_index) const {
+        if (!contains(row_index)) {
+            return nullptr;
+        }
+        return &m_data[static_cast<std::size_t>(m_sparse[row_index])];
+    }
 
-  [[nodiscard]] std::size_t size() const { return m_dense.size(); }
-  [[nodiscard]] bool empty() const { return m_dense.empty(); }
-  [[nodiscard]] const std::vector<std::uint32_t>& dense_rows() const {
-    return m_dense;
-  }
-  std::vector<T>& raw_data() { return m_data; }
-  const std::vector<T>& raw_data() const { return m_data; }
+    /// @brief Get a reference to the value at the given row index. Asserts if not present.
+    T& get(std::uint32_t row_index) {
+        assert(contains(row_index) && "Out of bounds sparse column reference.");
+        return m_data[static_cast<std::size_t>(m_sparse[row_index])];
+    }
+
+    /// @brief Get a const reference to the value at the given row index. Asserts if not present.
+    const T& get(std::uint32_t row_index) const {
+        assert(contains(row_index) && "Out of bounds sparse column reference.");
+        return m_data[static_cast<std::size_t>(m_sparse[row_index])];
+    }
+
+    /// @brief Emplace a value at the given row index.
+    template <typename... Args>
+    T& emplace(std::uint32_t row_index, Args&&... args) {
+        if (row_index >= m_sparse.size()) {
+            m_sparse.resize(static_cast<std::size_t>(row_index) + 1, tombstone);
+        }
+
+        if (m_sparse[row_index] != tombstone) {
+            const std::size_t dense_index = static_cast<std::size_t>(m_sparse[row_index]);
+            m_data[dense_index]           = T(std::forward<Args>(args)...);
+            return m_data[dense_index];
+        }
+
+        m_sparse[row_index] = static_cast<std::int32_t>(m_dense.size());
+        m_dense.push_back(row_index);
+        m_data.emplace_back(std::forward<Args>(args)...);
+        return m_data.back();
+    }
+
+    /// @brief Remove the value at the given row index.
+    void remove(std::uint32_t row_index) {
+        if (!contains(row_index)) {
+            return;
+        }
+
+        const std::size_t   dense_index    = static_cast<std::size_t>(m_sparse[row_index]);
+        const std::uint32_t last_row_index = m_dense.back();
+
+        // Swap with last
+        if (dense_index != m_data.size() - 1) {
+            m_data[dense_index]      = std::move(m_data.back());
+            m_dense[dense_index]     = m_dense.back();
+            m_sparse[last_row_index] = static_cast<std::int32_t>(dense_index);
+        }
+
+        m_sparse[row_index] = tombstone;
+        m_data.pop_back();
+        m_dense.pop_back();
+    }
+
+    /// @brief Physically reorder the dense storage based on a new row order.
+    void reorder(const std::vector<std::uint32_t>& row_order) {
+        std::vector<T>             new_data;
+        std::vector<std::uint32_t> new_dense;
+        new_data.reserve(m_data.size());
+        new_dense.reserve(m_dense.size());
+
+        for (const std::uint32_t row_index : row_order) {
+            if (contains(row_index)) {
+                new_data.push_back(std::move(get(row_index)));
+                new_dense.push_back(row_index);
+            }
+        }
+
+        std::fill(m_sparse.begin(), m_sparse.end(), tombstone);
+        for (std::size_t i = 0; i < new_dense.size(); ++i) {
+            m_sparse[new_dense[i]] = static_cast<std::int32_t>(i);
+        }
+
+        m_data  = std::move(new_data);
+        m_dense = std::move(new_dense);
+    }
+
+    /// @brief Number of present values in the column.
+    [[nodiscard]] std::size_t size() const { return m_dense.size(); }
+    /// @brief Is the column empty?
+    [[nodiscard]] bool empty() const { return m_dense.empty(); }
+    /// @brief Get the list of row indices that have values in this column.
+    [[nodiscard]] const std::vector<std::uint32_t>& dense_rows() const { return m_dense; }
+    /// @brief Access the raw dense data.
+    std::vector<T>& raw_data() { return m_data; }
+    /// @brief Access the raw dense data (const).
+    const std::vector<T>& raw_data() const { return m_data; }
 };
 
-// ============================================================================
+// ===========================
 // 4. Relational column table
-// ============================================================================
+// ===========================
 
+/// @brief A table where data is stored in sparse columns.
+///
+/// @tparam Columns The types of the columns in the table. Each type must be unique.
 template <typename... Columns>
-class soa_table {
- public:
-  static_assert(sizeof...(Columns) > 0,
-                "soa_table must contain at least one column type.");
-  static_assert(is_unique<Columns...>::value,
-                "All registered columns in an soa_table must have unique types.");
+class SoaTable {
+   public:
+    static_assert(sizeof...(Columns) > 0, "SoaTable must contain at least one column type.");
+    static_assert(
+        is_unique<Columns...>::value,
+        "All registered columns in an SoaTable must have unique types."
+    );
 
-  static constexpr std::size_t column_count = sizeof...(Columns);
-  using signature_type = std::bitset<column_count>;
+    /// @brief Total number of registered columns.
+    static constexpr std::size_t column_count = sizeof...(Columns);
+    /// @brief Bitset used to track which columns are present for a row.
+    using signature_type = std::bitset<column_count>;
 
-  struct RowMeta {
-    std::uint32_t generation = 0;
-    signature_type signature{};
-    bool alive = false;
-  };
-
-  template <typename T>
-  static constexpr bool registered_column_v = contains_type_v<T, Columns...>;
-
- private:
-  static constexpr std::uint32_t npos = std::numeric_limits<std::uint32_t>::max();
-
-  std::vector<RowMeta> m_rows;
-  std::vector<std::uint32_t> m_free_links;
-  std::uint32_t m_free_head = npos;
-  std::size_t m_alive_count = 0;
-  std::tuple<column_vector<Columns>...> m_pools;
-
-  [[nodiscard]] static constexpr bool can_address_rows(std::size_t count) {
-    return count <= std::numeric_limits<std::uint32_t>::max();
-  }
-
-  template <typename Self>
-  static auto rows_impl(Self* self) {
-    return std::views::iota(std::size_t{0}, self->m_rows.size()) |
-           std::views::filter([self](std::size_t row_index) {
-             return self->m_rows[row_index].alive;
-           }) |
-           std::views::transform([self](std::size_t row_index) {
-             return row_id{static_cast<std::uint32_t>(row_index),
-                           self->m_rows[row_index].generation};
-           });
-  }
-
-  template <typename Self, typename... ReqColumns>
-  static auto select_impl(Self* self) {
-    static_assert(sizeof...(ReqColumns) > 0,
-                  "Must provide at least one column type for projection.");
-    static_assert((registered_column_v<ReqColumns> && ...),
-                  "One or more requested columns are not registered inside "
-                  "the soa_table schema.");
-
-    signature_type mask;
-    ((mask.set(index_of<ReqColumns, std::tuple<Columns...>>::value)), ...);
-
-    std::size_t min_size = std::numeric_limits<std::size_t>::max();
-    const std::vector<std::uint32_t>* driver_dense = nullptr;
-
-    auto choose_driver = [&](auto* pool) {
-      if (pool->size() < min_size) {
-        min_size = pool->size();
-        driver_dense = &pool->dense_rows();
-      }
+    /// @brief Metadata for a single row slot.
+    struct RowMeta {
+        /// @brief Generation count for handle stability.
+        std::uint32_t generation = 0;
+        /// @brief Bitmask of present columns.
+        signature_type signature {};
+        /// @brief Whether the slot is currently occupied.
+        bool alive = false;
     };
 
-    (choose_driver(&std::get<column_vector<ReqColumns>>(self->m_pools)), ...);
-    assert(driver_dense != nullptr);
+    /// @brief Helper to check if a type T is a registered column.
+    template <typename T>
+    static constexpr bool registered_column_v = contains_type_v<T, Columns...>;
 
-    auto filter_func = [self, mask](std::uint32_t row_index) -> bool {
-      if (row_index >= self->m_rows.size() || !self->m_rows[row_index].alive) {
-        return false;
-      }
-      return (self->m_rows[row_index].signature & mask) == mask;
-    };
+   private:
+    static constexpr std::uint32_t npos = std::numeric_limits<std::uint32_t>::max();
 
-    auto transform_func = [self](std::uint32_t row_index) {
-      const row_id id{row_index, self->m_rows[row_index].generation};
-      using tuple_type = detail::select_row_t<Self, ReqColumns...>;
-      return tuple_type{id,
-                        std::get<column_vector<ReqColumns>>(self->m_pools)
-                            .get(row_index)...};
-    };
+    /// @brief Metadata for all row slots.
+    std::vector<RowMeta> m_rows;
+    /// @brief Linked list of free slots.
+    std::vector<std::uint32_t> m_free_links;
+    /// @brief Index of the first free slot.
+    std::uint32_t m_free_head = npos;
+    /// @brief Number of active rows.
+    std::size_t m_alive_count = 0;
+    /// @brief Storage for each column.
+    std::tuple<ColumnVector<Columns>...> m_columns;
 
-    return *driver_dense | std::views::filter(std::move(filter_func)) |
-           std::views::transform(std::move(transform_func));
-  }
-
- public:
-  soa_table() = default;
-
-  [[nodiscard]] std::size_t size() const noexcept { return m_alive_count; }
-  [[nodiscard]] std::size_t row_slots() const noexcept { return m_rows.size(); }
-  [[nodiscard]] bool empty() const noexcept { return m_alive_count == 0; }
-
-  void reserve(std::size_t capacity) {
-    m_rows.reserve(capacity);
-    m_free_links.reserve(capacity);
-    std::apply(
-        [capacity](auto&... pool) {
-          (pool.reserve(capacity), ...);
-        },
-        m_pools);
-  }
-
-  void shrink_to_fit() {
-    m_rows.shrink_to_fit();
-    m_free_links.shrink_to_fit();
-    std::apply([](auto&... pool) { (pool.shrink_to_fit(), ...); }, m_pools);
-  }
-
-  void clear() {
-    m_rows.clear();
-    m_free_links.clear();
-    m_free_head = npos;
-    m_alive_count = 0;
-    std::apply([](auto&... pool) { (pool.clear(), ...); }, m_pools);
-  }
-
-  [[nodiscard]] row_id insert() {
-    std::uint32_t index = 0;
-    if (m_free_head != npos) {
-      index = m_free_head;
-      m_free_head = m_free_links[index];
-      m_rows[index].alive = true;
-      m_rows[index].signature.reset();
-    } else {
-      if (!can_address_rows(m_rows.size() + 1)) {
-        throw std::overflow_error("soa_table exhausted the row_id index space.");
-      }
-      index = static_cast<std::uint32_t>(m_rows.size());
-      m_rows.push_back(RowMeta{});
-      m_rows.back().alive = true;
-      m_free_links.push_back(npos);
+    /// @brief Internal check for index overflow.
+    [[nodiscard]] static constexpr bool can_address_rows(std::size_t count) {
+        return count <= std::numeric_limits<std::uint32_t>::max();
     }
 
-    ++m_alive_count;
-    return row_id{index, m_rows[index].generation};
-  }
-
-  [[nodiscard]] bool is_valid(row_id id) const noexcept {
-    if (id.index >= m_rows.size()) {
-      return false;
-    }
-    const auto& meta = m_rows[id.index];
-    return meta.alive && meta.generation == id.generation;
-  }
-
-  void erase(row_id id) {
-    if (!is_valid(id)) {
-      return;
+    /// @brief Implementation of rows() iteration.
+    template <typename Self>
+    static auto rows_impl(Self* self) {
+        return std::views::iota(std::size_t {0}, self->m_rows.size()) |
+               std::views::filter([self](std::size_t row_index) {
+                   return self->m_rows[row_index].alive;
+               }) |
+               std::views::transform([self](std::size_t row_index) {
+                   return row_id {
+                       static_cast<std::uint32_t>(row_index), self->m_rows[row_index].generation
+                   };
+               });
     }
 
-    const std::uint32_t index = id.index;
-
-    auto clear_row_from_pool = [index]<typename T>(column_vector<T>& pool) {
-      if (pool.contains(index)) {
-        pool.remove(index);
-      }
-    };
-    std::apply([&](auto&... pool) { (clear_row_from_pool(pool), ...); }, m_pools);
-
-    auto& meta = m_rows[index];
-    meta.alive = false;
-    ++meta.generation;
-    meta.signature.reset();
-
-    m_free_links[index] = m_free_head;
-    m_free_head = index;
-
-    --m_alive_count;
-  }
-
-  template <typename T, typename... Args>
-  requires registered_column_v<T>
-  T& assign(row_id id, Args&&... args) {
-    if (!is_valid(id)) {
-      throw std::out_of_range("assign() called with an invalid row_id.");
+    template <typename Self, typename... ReqColumns>
+    static auto get_transform_func(Self* self) {
+        return [self](std::uint32_t row_index) -> detail::select_result_t<Self, ReqColumns...> {
+            const row_id id {row_index, self->m_rows[row_index].generation};
+            auto         get_col = [&]<typename T>(std::uint32_t idx) {
+                using ActualT = detail::optional_value_type_t<T>;
+                auto* ptr     = std::get<ColumnVector<ActualT>>(self->m_columns).try_get(idx);
+                if constexpr (detail::is_optional_v<T>) {
+                    using ResT = std::optional<std::reference_wrapper<
+                        std::conditional_t<std::is_const_v<Self>, const ActualT, ActualT>>>;
+                    if (ptr)
+                        return ResT(*ptr);
+                    return ResT {};
+                } else {
+                    return std::reference_wrapper<
+                        std::conditional_t<std::is_const_v<Self>, const ActualT, ActualT>>(*ptr);
+                }
+            };
+            return std::make_tuple(id, get_col.template operator()<ReqColumns>(row_index)...);
+        };
     }
 
-    auto& pool = std::get<column_vector<T>>(m_pools);
-    T& value = pool.emplace(id.index, std::forward<Args>(args)...);
-    m_rows[id.index].signature.set(index_of<T, std::tuple<Columns...>>::value);
-    return value;
-  }
+   public:
+    /// @brief Default constructor.
+    SoaTable() = default;
 
-  template <typename T>
-  requires registered_column_v<T>
-  void unassign(row_id id) {
-    if (!is_valid(id)) {
-      return;
+    /// @brief Number of active rows in the table.
+    [[nodiscard]] std::size_t size() const noexcept { return m_alive_count; }
+    /// @brief Number of row slots currently allocated.
+    [[nodiscard]] std::size_t row_slots() const noexcept { return m_rows.size(); }
+    /// @brief Is the table empty?
+    [[nodiscard]] bool empty() const noexcept { return m_alive_count == 0; }
+
+    /// @brief Reserve capacity for rows and columns.
+    void reserve(std::size_t capacity) {
+        m_rows.reserve(capacity);
+        m_free_links.reserve(capacity);
+        std::apply([capacity](auto&... pool) { (pool.reserve(capacity), ...); }, m_columns);
     }
 
-    auto& pool = std::get<column_vector<T>>(m_pools);
-    pool.remove(id.index);
-    m_rows[id.index].signature.reset(index_of<T, std::tuple<Columns...>>::value);
-  }
-
-  template <typename T>
-  requires registered_column_v<T>
-  [[nodiscard]] bool contains(row_id id) const {
-    if (!is_valid(id)) {
-      return false;
-    }
-    return m_rows[id.index].signature.test(index_of<T, std::tuple<Columns...>>::value);
-  }
-
-  template <typename T>
-  requires registered_column_v<T>
-  T* try_get(row_id id) {
-    if (!contains<T>(id)) {
-      return nullptr;
-    }
-    return std::get<column_vector<T>>(m_pools).try_get(id.index);
-  }
-
-  template <typename T>
-  requires registered_column_v<T>
-  const T* try_get(row_id id) const {
-    if (!contains<T>(id)) {
-      return nullptr;
-    }
-    return std::get<column_vector<T>>(m_pools).try_get(id.index);
-  }
-
-  template <typename T>
-  requires registered_column_v<T>
-  T& get(row_id id) {
-    auto* value = try_get<T>(id);
-    if (value == nullptr) {
-      throw std::out_of_range("Requested column is not available on this row.");
-    }
-    return *value;
-  }
-
-  template <typename T>
-  requires registered_column_v<T>
-  const T& get(row_id id) const {
-    auto* value = try_get<T>(id);
-    if (value == nullptr) {
-      throw std::out_of_range("Requested column is not available on this row.");
-    }
-    return *value;
-  }
-
-  [[nodiscard]] auto rows() { return rows_impl(this); }
-  [[nodiscard]] auto rows() const { return rows_impl(this); }
-
-  template <typename Func>
-  void for_each_row(Func&& func) {
-    for (row_id id : rows()) {
-      std::invoke(func, id);
-    }
-  }
-
-  template <typename Func>
-  void for_each_row(Func&& func) const {
-    for (row_id id : rows()) {
-      std::invoke(func, id);
-    }
-  }
-
-  template <typename... ReqColumns>
-  auto select() {
-    return select_impl<soa_table, ReqColumns...>(this);
-  }
-
-  template <typename... ReqColumns>
-  auto select() const {
-    return select_impl<const soa_table, ReqColumns...>(this);
-  }
-
-  template <typename T, typename Compare>
-  requires registered_column_v<T>
-  void sort_by_column(Compare&& comp) {
-    auto& pool = std::get<column_vector<T>>(m_pools);
-    const auto& dense = pool.dense_rows();
-
-    std::vector<std::uint32_t> sorted_rows = dense;
-    std::sort(sorted_rows.begin(), sorted_rows.end(),
-              [&](std::uint32_t a, std::uint32_t b) {
-                return std::invoke(comp, pool.get(a), pool.get(b));
-              });
-
-    std::apply(
-        [&](auto&... column_pool) { (column_pool.reorder(sorted_rows), ...); },
-        m_pools);
-  }
-
-  template <typename T, typename Compare>
-  requires registered_column_v<T>
-  void sort_by(Compare&& comp) {
-    sort_by_column<T>(std::forward<Compare>(comp));
-  }
-
-  template <typename T, typename Compare>
-  requires registered_column_v<T>
-  void sort_by_column_parallel(Compare&& comp) {
-    if constexpr (column_count <= 1) {
-      sort_by_column<T>(std::forward<Compare>(comp));
-      return;
+    /// @brief Shrink all internal storage to fit current size.
+    void shrink_to_fit() {
+        m_rows.shrink_to_fit();
+        m_free_links.shrink_to_fit();
+        std::apply([](auto&... pool) { (pool.shrink_to_fit(), ...); }, m_columns);
     }
 
-    auto& pool = std::get<column_vector<T>>(m_pools);
-    const auto& dense = pool.dense_rows();
-
-    std::vector<std::uint32_t> sorted_rows = dense;
-    std::sort(sorted_rows.begin(), sorted_rows.end(),
-              [&](std::uint32_t a, std::uint32_t b) {
-                return std::invoke(comp, pool.get(a), pool.get(b));
-              });
-
-    std::vector<std::future<void>> futures;
-    futures.reserve(column_count);
-
-    std::apply(
-        [&](auto&... column_pool) {
-          (futures.push_back(std::async(
-               std::launch::async,
-               [pool_ptr = &column_pool, &sorted_rows]() {
-                 pool_ptr->reorder(sorted_rows);
-               })), ...);
-        },
-        m_pools);
-
-    for (auto& future : futures) {
-      future.get();
+    /// @brief Clear all rows and columns. Does not reset generations.
+    void clear() {
+        m_rows.clear();
+        m_free_links.clear();
+        m_free_head   = npos;
+        m_alive_count = 0;
+        std::apply([](auto&... pool) { (pool.clear(), ...); }, m_columns);
     }
-  }
 
-  template <typename T, typename Compare>
-  requires registered_column_v<T>
-  void sort_by_parallel(Compare&& comp) {
-    sort_by_column_parallel<T>(std::forward<Compare>(comp));
-  }
+    /// @brief Insert a new empty row and return its ID.
+    [[nodiscard]] row_id insert() {
+        std::uint32_t index = 0;
+        if (m_free_head != npos) {
+            index               = m_free_head;
+            m_free_head         = m_free_links[index];
+            m_rows[index].alive = true;
+            m_rows[index].signature.reset();
+        } else {
+            if (!can_address_rows(m_rows.size() + 1)) {
+                throw std::overflow_error("SoaTable exhausted the row_id index space.");
+            }
+            index = static_cast<std::uint32_t>(m_rows.size());
+            m_rows.push_back(RowMeta {});
+            m_rows.back().alive = true;
+            m_free_links.push_back(npos);
+        }
+
+        ++m_alive_count;
+        return row_id {index, m_rows[index].generation};
+    }
+
+    /// @brief Check if a row_id is still valid and alive.
+    [[nodiscard]] bool is_valid(row_id id) const noexcept {
+        if (id.index >= m_rows.size()) {
+            return false;
+        }
+        const auto& meta = m_rows[id.index];
+        return meta.alive && meta.generation == id.generation;
+    }
+
+    /// @brief Erase a row by ID.
+    void erase(row_id id) {
+        if (!is_valid(id)) {
+            return;
+        }
+
+        const std::uint32_t index = id.index;
+
+        auto clear_row_from_pool = [index]<typename T>(ColumnVector<T>& pool) {
+            if (pool.contains(index)) {
+                pool.remove(index);
+            }
+        };
+        std::apply([&](auto&... pool) { (clear_row_from_pool(pool), ...); }, m_columns);
+
+        auto& meta = m_rows[index];
+        meta.alive = false;
+        ++meta.generation;
+        meta.signature.reset();
+
+        m_free_links[index] = m_free_head;
+        m_free_head         = index;
+
+        --m_alive_count;
+    }
+
+    /// @brief Assign a value to a column for the given row.
+    template <typename T, typename... Args>
+        requires registered_column_v<T>
+    T& assign(row_id id, Args&&... args) {
+        if (!is_valid(id)) {
+            throw std::out_of_range("assign() called with an invalid row_id.");
+        }
+
+        auto& pool  = std::get<ColumnVector<T>>(m_columns);
+        T&    value = pool.emplace(id.index, std::forward<Args>(args)...);
+        m_rows[id.index].signature.set(index_of<T, std::tuple<Columns...>>::value);
+        return value;
+    }
+
+    /// @brief Remove a value from a column for the given row.
+    template <typename T>
+        requires registered_column_v<T>
+    void unassign(row_id id) {
+        if (!is_valid(id)) {
+            return;
+        }
+
+        auto& pool = std::get<ColumnVector<T>>(m_columns);
+        pool.remove(id.index);
+        m_rows[id.index].signature.reset(index_of<T, std::tuple<Columns...>>::value);
+    }
+
+    /// @brief Check if a row has a value for the specified column.
+    template <typename T>
+        requires registered_column_v<T>
+    [[nodiscard]] bool contains(row_id id) const {
+        if (!is_valid(id)) {
+            return false;
+        }
+        return m_rows[id.index].signature.test(index_of<T, std::tuple<Columns...>>::value);
+    }
+
+    /// @brief Try to get a pointer to the value of a column for the given row.
+    template <typename T>
+        requires registered_column_v<T>
+    T* try_get(row_id id) {
+        if (!contains<T>(id)) {
+            return nullptr;
+        }
+        return std::get<ColumnVector<T>>(m_columns).try_get(id.index);
+    }
+
+    /// @brief Try to get a const pointer to the value of a column for the given row.
+    template <typename T>
+        requires registered_column_v<T>
+    const T* try_get(row_id id) const {
+        if (!contains<T>(id)) {
+            return nullptr;
+        }
+        return std::get<ColumnVector<T>>(m_columns).try_get(id.index);
+    }
+
+    /// @brief Get a reference to the value of a column for the given row. Throws if not present.
+    template <typename T>
+        requires registered_column_v<T>
+    T& get(row_id id) {
+        auto* value = try_get<T>(id);
+        if (value == nullptr) {
+            throw std::out_of_range("Requested column is not available on this row.");
+        }
+        return *value;
+    }
+
+    /// @brief Get a const reference to the value of a column for the given row. Throws if not
+    /// present.
+    template <typename T>
+        requires registered_column_v<T>
+    const T& get(row_id id) const {
+        auto* value = try_get<T>(id);
+        if (value == nullptr) {
+            throw std::out_of_range("Requested column is not available on this row.");
+        }
+        return *value;
+    }
+
+    /// @brief Iterate over all alive row IDs.
+    [[nodiscard]] auto rows() { return rows_impl(this); }
+    /// @brief Iterate over all alive row IDs (const).
+    [[nodiscard]] auto rows() const { return rows_impl(this); }
+
+    /// @brief Execute a function for each alive row ID.
+    template <typename Func>
+    void for_each_row(Func&& func) {
+        for (row_id id : rows()) {
+            std::invoke(func, id);
+        }
+    }
+
+    /// @brief Execute a function for each alive row ID (const).
+    template <typename Func>
+    void for_each_row(Func&& func) const {
+        for (row_id id : rows()) {
+            std::invoke(func, id);
+        }
+    }
+
+    /// @brief Select rows that have all specified columns and provide access to them.
+    ///
+    /// Returns a range of tuples containing (row_id, std::reference_wrapper<ReqColumns>...).
+    template <typename... ReqColumns>
+    auto select() {
+        static_assert(
+            sizeof...(ReqColumns) > 0, "Must provide at least one column type for projection."
+        );
+        static_assert(
+            (registered_column_v<detail::optional_value_type_t<ReqColumns>> && ...),
+            "One or more requested columns are not registered inside the SoaTable schema."
+        );
+
+        signature_type required_mask;
+        (
+            [&] {
+                if constexpr (!detail::is_optional_v<ReqColumns>)
+                    required_mask.set(index_of<ReqColumns, std::tuple<Columns...>>::value);
+            }(),
+            ...);
+
+        constexpr bool has_required = (!detail::is_optional_v<ReqColumns> || ...);
+
+        if constexpr (!has_required) {
+            return std::views::iota(std::size_t {0}, m_rows.size()) |
+                   std::views::filter([this](std::size_t row_index) {
+                       return m_rows[row_index].alive;
+                   }) |
+                   std::views::transform([this](std::size_t row_index) {
+                       return get_transform_func<SoaTable, ReqColumns...>(this)(
+                           static_cast<std::uint32_t>(row_index)
+                       );
+                   });
+        } else {
+            std::size_t                       min_size = std::numeric_limits<std::size_t>::max();
+            const std::vector<std::uint32_t>* driver_dense = nullptr;
+
+            (
+                [&] {
+                    if constexpr (!detail::is_optional_v<ReqColumns>) {
+                        auto& pool = std::get<ColumnVector<ReqColumns>>(m_columns);
+                        if (pool.size() < min_size) {
+                            min_size     = pool.size();
+                            driver_dense = &pool.dense_rows();
+                        }
+                    }
+                }(),
+                ...);
+
+            auto filter_func = [this, required_mask](std::uint32_t row_index) -> bool {
+                if (row_index >= m_rows.size() || !m_rows[row_index].alive) {
+                    return false;
+                }
+                return (m_rows[row_index].signature & required_mask) == required_mask;
+            };
+
+            return *driver_dense | std::views::filter(std::move(filter_func)) |
+                   std::views::transform(get_transform_func<SoaTable, ReqColumns...>(this));
+        }
+    }
+
+    /// @brief Select rows that have all specified columns (const).
+    template <typename... ReqColumns>
+    auto select() const {
+        static_assert(
+            sizeof...(ReqColumns) > 0, "Must provide at least one column type for projection."
+        );
+        static_assert(
+            (registered_column_v<detail::optional_value_type_t<ReqColumns>> && ...),
+            "One or more requested columns are not registered inside the SoaTable schema."
+        );
+
+        signature_type required_mask;
+        (
+            [&] {
+                if constexpr (!detail::is_optional_v<ReqColumns>)
+                    required_mask.set(index_of<ReqColumns, std::tuple<Columns...>>::value);
+            }(),
+            ...);
+
+        constexpr bool has_required = (!detail::is_optional_v<ReqColumns> || ...);
+
+        if constexpr (!has_required) {
+            return std::views::iota(std::size_t {0}, m_rows.size()) |
+                   std::views::filter([this](std::size_t row_index) {
+                       return m_rows[row_index].alive;
+                   }) |
+                   std::views::transform([this](std::size_t row_index) {
+                       return get_transform_func<const SoaTable, ReqColumns...>(this)(
+                           static_cast<std::uint32_t>(row_index)
+                       );
+                   });
+        } else {
+            std::size_t                       min_size = std::numeric_limits<std::size_t>::max();
+            const std::vector<std::uint32_t>* driver_dense = nullptr;
+
+            (
+                [&] {
+                    if constexpr (!detail::is_optional_v<ReqColumns>) {
+                        auto& pool = std::get<ColumnVector<ReqColumns>>(m_columns);
+                        if (pool.size() < min_size) {
+                            min_size     = pool.size();
+                            driver_dense = &pool.dense_rows();
+                        }
+                    }
+                }(),
+                ...);
+
+            auto filter_func = [this, required_mask](std::uint32_t row_index) -> bool {
+                if (row_index >= m_rows.size() || !m_rows[row_index].alive) {
+                    return false;
+                }
+                return (m_rows[row_index].signature & required_mask) == required_mask;
+            };
+
+            return *driver_dense | std::views::filter(std::move(filter_func)) |
+                   std::views::transform(get_transform_func<const SoaTable, ReqColumns...>(this));
+        }
+    }
+
+    /// @brief Fast batch insertion of rows.
+    /// @param count Number of rows to insert.
+    /// @return A vector of newly created row_ids.
+    std::vector<row_id> insert_batch(std::size_t count) {
+        std::vector<row_id> ids;
+        ids.reserve(count);
+        for (std::size_t i = 0; i < count; ++i) {
+            ids.push_back(insert());
+        }
+        return ids;
+    }
+
+    /// @brief Fast batch assignment for a single column.
+    template <typename T, typename InputIt>
+        requires registered_column_v<T>
+    void assign_batch(const std::vector<row_id>& ids, InputIt first) {
+        auto& pool = std::get<ColumnVector<T>>(m_columns);
+        auto  it   = first;
+        for (auto id : ids) {
+            if (is_valid(id)) {
+                pool.emplace(id.index, *it);
+                m_rows[id.index].signature.set(index_of<T, std::tuple<Columns...>>::value);
+            }
+            ++it;
+        }
+    }
+
+    /// @brief Multi-column sorting. Physically reorders all columns based on multiple comparison
+    /// criteria.
+    template <typename... SortCriteria>
+    void sort_by_multi(SortCriteria&&... criteria) {
+        // Find smallest driver if possible, otherwise use all alive rows
+        // For simplicity and correctness, we will use all alive rows indices
+        std::vector<std::uint32_t> sorted_rows;
+        sorted_rows.reserve(m_alive_count);
+        for (std::size_t i = 0; i < m_rows.size(); ++i) {
+            if (m_rows[i].alive) {
+                sorted_rows.push_back(static_cast<std::uint32_t>(i));
+            }
+        }
+
+        auto multi_comp = [&](std::uint32_t a, std::uint32_t b) {
+            bool result = false;
+            bool decided =
+                (([&] {
+                     using T     = typename std::decay_t<SortCriteria>::first_type;
+                     auto& pool  = std::get<ColumnVector<T>>(m_columns);
+                     bool  has_a = pool.contains(a);
+                     bool  has_b = pool.contains(b);
+                     if (has_a && has_b) {
+                         auto& val_a = pool.get(a);
+                         auto& val_b = pool.get(b);
+                         if (criteria.second(val_a, val_b)) {
+                             result = true;
+                             return true;
+                         }
+                         if (criteria.second(val_b, val_a)) {
+                             result = false;
+                             return true;
+                         }
+                         return false;
+                     }
+                     if (has_a != has_b) {
+                         result = has_a;  // rows with the column come first
+                         return true;
+                     }
+                     return false;
+                 }()) ||
+                 ...);
+            return decided ? result : (a < b);
+        };
+
+        std::sort(sorted_rows.begin(), sorted_rows.end(), multi_comp);
+        std::apply(
+            [&](auto&... column_pool) { (column_pool.reorder(sorted_rows), ...); }, m_columns
+        );
+    }
+
+    /// @brief Physically reorder all columns based on the sorted order of one column.
+    template <typename T, typename Compare>
+        requires registered_column_v<T>
+    void sort_by_column(Compare&& comp) {
+        auto&       pool  = std::get<ColumnVector<T>>(m_columns);
+        const auto& dense = pool.dense_rows();
+
+        std::vector<std::uint32_t> sorted_rows = dense;
+        std::sort(sorted_rows.begin(), sorted_rows.end(), [&](std::uint32_t a, std::uint32_t b) {
+            return std::invoke(comp, pool.get(a), pool.get(b));
+        });
+
+        std::apply(
+            [&](auto&... column_pool) { (column_pool.reorder(sorted_rows), ...); }, m_columns
+        );
+    }
+
+    /// @brief Alias for sort_by_column.
+    template <typename T, typename Compare>
+        requires registered_column_v<T>
+    void sort_by(Compare&& comp) {
+        sort_by_column<T>(std::forward<Compare>(comp));
+    }
+
+    /// @brief Parallel version of sort_by_column. Reorders columns in parallel.
+    template <typename T, typename Compare>
+        requires registered_column_v<T>
+    void sort_by_column_parallel(Compare&& comp) {
+        if constexpr (column_count <= 1) {
+            sort_by_column<T>(std::forward<Compare>(comp));
+            return;
+        }
+
+        auto&       pool  = std::get<ColumnVector<T>>(m_columns);
+        const auto& dense = pool.dense_rows();
+
+        std::vector<std::uint32_t> sorted_rows = dense;
+        std::sort(sorted_rows.begin(), sorted_rows.end(), [&](std::uint32_t a, std::uint32_t b) {
+            return std::invoke(comp, pool.get(a), pool.get(b));
+        });
+
+        std::vector<std::future<void>> futures;
+        futures.reserve(column_count);
+
+        std::apply(
+            [&](auto&... column_pool) {
+                (futures.push_back(
+                     std::async(
+                         std::launch::async,
+                         [pool_ptr = &column_pool, &sorted_rows]() {
+                             pool_ptr->reorder(sorted_rows);
+                         }
+                     )
+                 ),
+                 ...);
+            },
+            m_columns
+        );
+
+        for (auto& future : futures) {
+            future.get();
+        }
+    }
+
+    /// @brief Alias for sort_by_column_parallel.
+    template <typename T, typename Compare>
+        requires registered_column_v<T>
+    void sort_by_parallel(Compare&& comp) {
+        sort_by_column_parallel<T>(std::forward<Compare>(comp));
+    }
 };
 
-// ============================================================================
+// =====================
 // 5. Row handle helper
-// ============================================================================
+// =====================
 
+/// @brief A convenience wrapper around a row_id and a reference to its table.
 template <typename... RegisteredColumns>
-struct row_handle {
-  row_id id{};
-  soa_table<RegisteredColumns...>* table = nullptr;
+struct RowHandle {
+    /// @brief The ID of the row.
+    row_id id {};
+    /// @brief Pointer to the table containing the row.
+    SoaTable<RegisteredColumns...>* table = nullptr;
 
-  constexpr row_handle() = default;
-  constexpr row_handle(row_id row, soa_table<RegisteredColumns...>& table_ref)
-      : id(row), table(&table_ref) {}
+    /// @brief Default constructor.
+    constexpr RowHandle() = default;
+    /// @brief Construct from a row_id and table reference.
+    constexpr RowHandle(row_id row, SoaTable<RegisteredColumns...>& table_ref)
+        : id(row), table(&table_ref) {}
 
- private:
-  [[nodiscard]] soa_table<RegisteredColumns...>& require_table() {
-    if (table == nullptr) {
-      throw std::logic_error("row_handle is not bound to a table.");
+   private:
+    /// @brief Ensure the table is bound.
+    [[nodiscard]] SoaTable<RegisteredColumns...>& require_table() {
+        if (table == nullptr) {
+            throw std::logic_error("RowHandle is not bound to a table.");
+        }
+        return *table;
     }
-    return *table;
-  }
 
-  [[nodiscard]] const soa_table<RegisteredColumns...>& require_table() const {
-    if (table == nullptr) {
-      throw std::logic_error("row_handle is not bound to a table.");
+    /// @brief Ensure the table is bound (const).
+    [[nodiscard]] const SoaTable<RegisteredColumns...>& require_table() const {
+        if (table == nullptr) {
+            throw std::logic_error("RowHandle is not bound to a table.");
+        }
+        return *table;
     }
-    return *table;
-  }
 
- public:
-  [[nodiscard]] bool is_valid() const {
-    return table != nullptr && table->is_valid(id);
-  }
+   public:
+    /// @brief Check if the handle is valid and the row is alive.
+    [[nodiscard]] bool is_valid() const { return table != nullptr && table->is_valid(id); }
 
-  explicit operator bool() const { return is_valid(); }
+    /// @brief Boolean conversion for validity check.
+    explicit operator bool() const { return is_valid(); }
 
-  template <typename T, typename... Args>
-  T& assign(Args&&... args) {
-    return require_table().template assign<T>(id, std::forward<Args>(args)...);
-  }
-
-  template <typename T>
-  void unassign() {
-    require_table().template unassign<T>(id);
-  }
-
-  template <typename T>
-  [[nodiscard]] bool contains() const {
-    return require_table().template contains<T>(id);
-  }
-
-  template <typename T>
-  T& get() {
-    return require_table().template get<T>(id);
-  }
-
-  template <typename T>
-  const T& get() const {
-    return require_table().template get<T>(id);
-  }
-
-  template <typename T>
-  T* try_get() {
-    return require_table().template try_get<T>(id);
-  }
-
-  template <typename T>
-  const T* try_get() const {
-    return require_table().template try_get<T>(id);
-  }
-
-  bool erase() {
-    if (!is_valid()) {
-      return false;
+    /// @brief Assign a value to a column for this row.
+    template <typename T, typename... Args>
+    T& assign(Args&&... args) {
+        return require_table().template assign<T>(id, std::forward<Args>(args)...);
     }
-    require_table().erase(id);
-    return true;
-  }
+
+    /// @brief Remove a value from a column for this row.
+    template <typename T>
+    void unassign() {
+        require_table().template unassign<T>(id);
+    }
+
+    /// @brief Check if this row has a value for the specified column.
+    template <typename T>
+    [[nodiscard]] bool contains() const {
+        return require_table().template contains<T>(id);
+    }
+
+    /// @brief Get a reference to a column's value. Throws if not present.
+    template <typename T>
+    T& get() {
+        return require_table().template get<T>(id);
+    }
+
+    /// @brief Get a const reference to a column's value. Throws if not present.
+    template <typename T>
+    const T& get() const {
+        return require_table().template get<T>(id);
+    }
+
+    /// @brief Try to get a pointer to a column's value.
+    template <typename T>
+    T* try_get() {
+        return require_table().template try_get<T>(id);
+    }
+
+    /// @brief Try to get a const pointer to a column's value.
+    template <typename T>
+    const T* try_get() const {
+        return require_table().template try_get<T>(id);
+    }
+
+    /// @brief Erase this row from the table.
+    bool erase() {
+        if (!is_valid()) {
+            return false;
+        }
+        require_table().erase(id);
+        return true;
+    }
 };
 
-}  // namespace sstd
+}  // namespace soatable
 
-namespace soatable = sstd;
+/// @brief Compatibility alias for the old namespace.
+namespace sstd = soatable;
