@@ -2,16 +2,22 @@ cmake_minimum_required(VERSION 3.20)
 
 project(soatable VERSION 0.1.0 LANGUAGES CXX)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON) 
+
+set(FETCHCONTENT_BASE_DIR "${CMAKE_SOURCE_DIR}/.cache/_deps")
+
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
 option(SOATABLE_BUILD_EXAMPLES "Build the SoaTable example program" ON)
 option(SOATABLE_BUILD_BENCHMARKS "Build the SoaTable benchmark program" ON)
+option(SOATABLE_BUILD_TESTS "Build the SoaTable tests" ON)
+
 
 add_library(soatable INTERFACE)
 add_library(soatable::soatable ALIAS soatable)
 
-target_compile_features(soatable INTERFACE cxx_std_20)
+target_compile_features(soatable INTERFACE cxx_std_23)
 target_include_directories(soatable INTERFACE
   $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
@@ -55,3 +61,7 @@ if(SOATABLE_BUILD_BENCHMARKS AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks)
   add_subdirectory(benchmarks)
 endif()
 
+if(SOATABLE_BUILD_TESTS AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tests)
+  enable_testing()
+  add_subdirectory(tests)
+endif()
