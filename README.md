@@ -2,6 +2,17 @@
 
 SoaTable is a high-performance, header-only C++23 library providing a sparse column-oriented data structure. It is designed for workloads where data is naturally row-addressed but frequently queried by a subset of fields, offering significant performance gains through cache-friendly memory layout and efficient joins.
 
+## Table of Contents
+
+- [Core Concepts](#core-concepts)
+- [Why Use SoaTable?](#why-use-soatable)
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [Real-World Example](#real-world-example)
+- [Installation](#installation)
+- [Benchmarks](#benchmarks)
+- [License](#license)
+
 ## Core Concepts
 
 SoaTable combines three powerful ideas:
@@ -76,6 +87,83 @@ int main() {
 }
 ```
 
+## Real-World Example
+
+This example demonstrates how to use SoaTable for a vehicle fleet management system, utilizing batch operations, sparse joins, multi-column sorting, and data compression.
+
+```cpp
+#include <soatable/soatable.hpp>
+#include <iostream>
+#include <vector>
+#include <string>
+#include <optional>
+#include <utility>
+#include <cstdint>
+#include <print>
+
+// 1. Data Compression Utilities
+struct Status {
+    uint8_t flags = 0;
+    // packed_bits: [0-1] Engine State, [2-2] Lights, [3-3] Wiper
+    using EngineState = soatable::packed_bits<uint8_t, uint8_t, 0, 2>;
+    using Lights      = soatable::packed_bits<uint8_t, bool, 2, 1>;
+
+    void set_engine(uint8_t state) { EngineState::set(flags, state); }
+};
+
+struct Position { float x, y; };
+
+// Using quantized_float for Speed (0-200 km/h) and Fuel (0-100%)
+using Speed = soatable::quantized_float<uint16_t, 0, 200000, 16>;
+using Fuel  = soatable::quantized_float<uint8_t, 0, 100000, 8>;
+
+struct Driver { std::string name; };
+struct Maintenance { bool urgent; };
+
+int main() {
+    // Define the table with various column types
+    soatable::SoaTable<int, Position, Speed, Fuel, Status, soatable::DeltaValue<float>, Driver, Maintenance> fleet;
+
+    // 2. Batch Operations: High-throughput loading
+    auto ids = fleet.insert_batch(1000);
+    std::vector<int> vids(1000);
+    for(int i=0; i<1000; ++i) vids[i] = 1000 + i;
+    fleet.assign_batch<int>(ids, vids.begin());
+
+    // 3. Stable IDs: Keep a handle to a specific vehicle
+    auto my_truck_id = ids[50];
+    fleet.assign<Driver>(my_truck_id, "Alice");
+
+    // 4. Sparse Projection: Efficiently join required and optional columns
+    fleet.assign<Maintenance>(ids[10], Maintenance{true});
+    fleet.assign<Maintenance>(ids[50], Maintenance{false});
+
+    // Only iterates over rows that HAVE Maintenance. Driver is optional.
+    for (auto [row, maint, driver] : fleet.select<Maintenance, std::optional<Driver>>()) {
+        std::string name = driver ? driver->get().name : "Unknown";
+        std::println("Vehicle ID {}: Maintenance (Urgent: {}), Driver: {}", row.index, maint.get().urgent, name);
+    }
+
+    // 5. Multi-Column Sorting: Physically reorder all columns
+    // Sort by Fuel (ascending), then by Speed (descending)
+    fleet.sort_by_multi(
+        std::make_pair(Fuel{}, [](const Fuel& a, const Fuel& b) { return a.get() < b.get(); }),
+        std::make_pair(Speed{}, [](const Speed& a, const Speed& b) { return a.get() > b.get(); })
+    );
+
+    // 6. Parallel Sorting: Reorder columns in parallel for large datasets
+    fleet.sort_by_column_parallel<int>([](int a, int b) { return a < b; });
+
+    // 7. Data Compression: DeltaValue for smooth tracking
+    auto altitude_id = ids[0];
+    soatable::DeltaValue<float> alt(100.0f);
+    alt.apply_delta(alt.get_delta(105.0f));
+    fleet.assign<soatable::DeltaValue<float>>(altitude_id, alt);
+
+    return 0;
+}
+```
+
 ## Installation
 
 ### CMake
@@ -95,7 +183,7 @@ SoaTable is designed to be easily integrated into vcpkg. You can add it to your 
 
 Benchmark results (250,000 rows, selective join):
 | Method | Time |
-|--------|------|
+|-------------------|----------------|
 | SoaTable `select` | ~162,000 ns |
 | AoS Branch Scan | ~2,035,000 ns |
 _Run on 4x 2300 MHz CPU, Release Build._
