@@ -1,7 +1,11 @@
 {
   "name": "soatable",
   "version-string": "0.1.0",
-  "description": "Header-only C++20 sparse column table with stable row handles and sparse joins.",
-  "license": "MIT"
+  "description": "Header-only C++23 sparse column table with stable row handles and sparse joins.",
+  "license": "MIT",
+  "dependencies": [
+    "benchmark",
+    "gtest"
+  ]
 }
 
