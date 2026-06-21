@@ -1,5 +1,14 @@
 # SoaTable
 
+[![Build](https://github.com/bbalouki/soatable/actions/workflows/ci.yaml/badge.svg)](https://github.com/bbalouki/soatable/actions/workflows/ci.yaml)
+![C++](https://img.shields.io/badge/C%2B%2B-23-blue.svg)
+![CMake](https://img.shields.io/badge/CMake-3.20%2B-green.svg)
+![License](https://img.shields.io/badge/License-MIT-yellow.svg)
+![Header-only](https://img.shields.io/badge/Header--only-Yes-blue)
+![Dependencies](https://img.shields.io/badge/Dependencies-None-brightgreen)
+![Namespace](https://img.shields.io/badge/Namespace-soatable-lightgrey)
+![Performance](https://img.shields.io/badge/Speedup-5x--15x-orange)
+
 SoaTable is a high-performance, header-only C++23 library providing a sparse column-oriented data structure. It is designed for workloads where data is naturally row-addressed but frequently queried by a subset of fields, offering significant performance gains through cache-friendly memory layout and efficient joins.
 
 ## Table of Contents
