@@ -47,9 +47,9 @@ struct ObjectName {
 struct IsActive {};  // Component with no data (tag)
 
 using Table = soatable::
-    SoaTable<CashFlow, AccountId, RiskScore, Mass, Velocity, Position, ObjectName, IsActive>;
+    soa_table<CashFlow, AccountId, RiskScore, Mass, Velocity, Position, ObjectName, IsActive>;
 using Row = soatable::
-    RowHandle<CashFlow, AccountId, RiskScore, Mass, Velocity, Position, ObjectName, IsActive>;
+    row_handle<CashFlow, AccountId, RiskScore, Mass, Velocity, Position, ObjectName, IsActive>;
 
 int main() {
     Table database;

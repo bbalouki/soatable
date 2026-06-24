@@ -96,7 +96,7 @@ TEST(SortTest, ParallelSortMatchesSerialResult) {
 }
 
 TEST(SortTest, ParallelSortHandlesSingleColumnTable) {
-    soatable::SoaTable<Age> table;
+    soatable::soa_table<Age> table;
     const auto id1 = table.insert();
     table.assign<Age>(id1, 3);
     const auto id2 = table.insert();

@@ -1,4 +1,4 @@
-// RowHandle convenience wrapper: binding, validity, column access, and unbound-handle errors.
+// row_handle convenience wrapper: binding, validity, column access, and unbound-handle errors.
 
 #include <gtest/gtest.h>
 
@@ -11,7 +11,7 @@ using soatable_test::Age;
 using soatable_test::DemoTable;
 using soatable_test::Name;
 
-using DemoHandle = soatable::RowHandle<Name, Age, soatable_test::Score>;
+using DemoHandle = soatable::row_handle<Name, Age, soatable_test::Score>;
 
 TEST(RowHandleTest, DefaultHandleIsInvalid) {
     DemoHandle handle;

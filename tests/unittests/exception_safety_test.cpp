@@ -12,7 +12,7 @@ using soatable_test::MoveOnly;
 using soatable_test::ThrowOnNth;
 
 TEST(ExceptionSafetyTest, MoveOnlyColumnSupportsFullLifecycle) {
-    soatable::SoaTable<MoveOnly> table;
+    soatable::soa_table<MoveOnly> table;
 
     const auto first = table.insert();
     table.assign<MoveOnly>(first, 5);
@@ -27,7 +27,7 @@ TEST(ExceptionSafetyTest, MoveOnlyColumnSupportsFullLifecycle) {
 }
 
 TEST(ExceptionSafetyTest, MoveOnlyColumnSurvivesReorder) {
-    soatable::SoaTable<MoveOnly> table;
+    soatable::soa_table<MoveOnly> table;
     const auto a = table.insert();
     table.assign<MoveOnly>(a, 3);
     const auto b = table.insert();
@@ -45,7 +45,7 @@ TEST(ExceptionSafetyTest, MoveOnlyColumnSurvivesReorder) {
 }
 
 TEST(ExceptionSafetyTest, FailedAssignLeavesColumnConsistent) {
-    soatable::SoaTable<ThrowOnNth> table;
+    soatable::soa_table<ThrowOnNth> table;
     const auto id0 = table.insert();
     const auto id1 = table.insert();
     const auto id2 = table.insert();

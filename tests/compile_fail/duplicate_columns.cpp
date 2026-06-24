@@ -9,7 +9,7 @@ struct Age {
 }  // namespace
 
 int main() {
-    soatable::SoaTable<Age, Age> table;
+    soatable::soa_table<Age, Age> table;
     static_cast<void>(table);
     return 0;
 }

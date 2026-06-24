@@ -1,6 +1,6 @@
 #pragma once
 
-// Shared column types and fixtures used across the SoaTable unit tests. Kept header-only so each
+// Shared column types and fixtures used across the soa_table unit tests. Kept header-only so each
 // translation unit compiles them directly; the throwing type's budget is per-process state reset by
 // the tests that use it.
 
@@ -22,7 +22,7 @@ struct Score {
     float value = 0.0F;
 };
 
-using DemoTable = soatable::SoaTable<Name, Age, Score>;
+using DemoTable = soatable::soa_table<Name, Age, Score>;
 
 // A move-only column type proves emplace/remove/reorder never rely on copy construction.
 struct MoveOnly {

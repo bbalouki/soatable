@@ -3,7 +3,7 @@
 #include "soatable/soatable.hpp"
 
 int main() {
-    soatable::SoaTable<> table;
+    soatable::soa_table<> table;
     static_cast<void>(table);
     return 0;
 }

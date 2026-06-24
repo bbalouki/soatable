@@ -62,7 +62,13 @@ In our benchmarks, SoaTable's `select` queries are often **5x to 15x faster** th
 - **Batch Operations:** `insert_batch` and `assign_batch` for high-throughput data loading.
 - **Parallel Sorting:** Physically reorder columns in parallel based on a comparison criteria.
 - **Multi-Column Sorting:** Sort by primary, secondary, etc., keys.
-- **Data Compression Utilities:** Includes `quantized_float`, `packed_bits`, and `DeltaValue` for compact storage.
+- **Data Compression Utilities:** Includes `quantized_float`, `packed_bits`, and `delta_value` for compact storage.
+- **Reference-Semantic Row Views:** `view<A, B>()` yields `row_view` proxies so structured bindings give real references (`for (auto [id, a, b] : table.view<A, B>()) a.x += b.y;`) without `.get()`.
+- **Non-Throwing Accessors:** `get_expected<T>()` returns `std::expected<std::reference_wrapper<T>, access_error>` for hot paths and no-exceptions builds, alongside throwing `get<T>()` and nullable `try_get<T>()`.
+
+### Naming
+
+The public API uses std-style lowercase names (`soa_table`, `row_handle`, `column_vector`, `delta_value`, `dirty_mask`). The previous PascalCase spellings (`SoaTable`, `RowHandle`, ...) remain as `[[deprecated]]` aliases for one migration window and will be removed in a future major release.
 
 ## Quick Start
 
@@ -75,19 +81,19 @@ struct Name { std::string value; };
 struct Poisoned {}; // Component with no data
 
 int main() {
-    soatable::SoaTable<Health, Name, Poisoned> table;
+    soatable::soa_table<Health, Name, Poisoned> table;
 
     // Insertion
     auto id = table.insert();
     table.assign<Name>(id, "Warrior");
     table.assign<Health>(id, 100.0f);
 
-    // Efficient Selection
-    for (auto [row, health, name] : table.select<Health, Name>()) {
-        std::println("Row {}: {} has {} health", row.index, name.get().value, health.get().value);
+    // Reference-semantic views: structured bindings yield real references (no .get()).
+    for (auto [row, health, name] : table.view<Health, Name>()) {
+        std::println("Row {}: {} has {} health", row.index, name.value, health.value);
     }
 
-    // Optional columns
+    // Optional columns still use select<>(), which returns reference_wrapper tuples.
     for (auto [row, name, poison] : table.select<Name, std::optional<Poisoned>>()) {
         if (poison) {
             std::println("{} is poisoned!", name.get().value);
@@ -131,7 +137,7 @@ struct Maintenance { bool urgent; };
 
 int main() {
     // Define the table with various column types
-    soatable::SoaTable<int, Position, Speed, Fuel, Status, soatable::DeltaValue<float>, Driver, Maintenance> fleet;
+    soatable::soa_table<int, Position, Speed, Fuel, Status, soatable::delta_value<float>, Driver, Maintenance> fleet;
 
     // 2. Batch Operations: High-throughput loading
     auto ids = fleet.insert_batch(1000);
@@ -165,9 +171,9 @@ int main() {
 
     // 7. Data Compression: DeltaValue for smooth tracking
     auto altitude_id = ids[0];
-    soatable::DeltaValue<float> alt(100.0f);
+    soatable::delta_value<float> alt(100.0f);
     alt.apply_delta(alt.get_delta(105.0f));
-    fleet.assign<soatable::DeltaValue<float>>(altitude_id, alt);
+    fleet.assign<soatable::delta_value<float>>(altitude_id, alt);
 
     return 0;
 }

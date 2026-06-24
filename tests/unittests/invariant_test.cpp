@@ -22,7 +22,7 @@ struct ModelRow {
     std::optional<int>  age;
 };
 
-using Table = soatable::SoaTable<Age, Name>;
+using Table = soatable::soa_table<Age, Name>;
 
 void verify_against_model(const Table& table, const std::vector<ModelRow>& model) {
     ASSERT_EQ(table.size(), model.size());

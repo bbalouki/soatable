@@ -1,5 +1,5 @@
 // Round-trip and bound coverage for the standalone helpers: quantized_float, packed_bits,
-// DeltaValue, and DirtyMask. Sweeps use deterministic value ranges (no randomness).
+// delta_value, and dirty_mask. Sweeps use deterministic value ranges (no randomness).
 
 #include <gtest/gtest.h>
 
@@ -59,7 +59,7 @@ TEST(PackedBitsTest, SetGetRoundTripPerField) {
 }
 
 TEST(DeltaValueTest, DeltaRoundTripStaysWithinOneScaleStep) {
-    using Delta = soatable::DeltaValue<double, std::int16_t, 10>;  // Scale = 0.01.
+    using Delta = soatable::delta_value<double, std::int16_t, 10>;  // Scale = 0.01.
     constexpr double scale = 0.01;
 
     Delta tracked {100.0};
@@ -72,7 +72,7 @@ TEST(DeltaValueTest, DeltaRoundTripStaysWithinOneScaleStep) {
 }
 
 TEST(DeltaValueTest, ConstructionAndConversion) {
-    soatable::DeltaValue<double, std::int16_t, 10> tracked {42.0};
+    soatable::delta_value<double, std::int16_t, 10> tracked {42.0};
     EXPECT_DOUBLE_EQ(static_cast<double>(tracked), 42.0);
 }
 
@@ -85,7 +85,7 @@ enum class Flags : std::uint32_t {
 }  // namespace
 
 TEST(DirtyMaskTest, MarkClearAndQueryFlags) {
-    soatable::DirtyMask<Flags> mask;
+    soatable::dirty_mask<Flags> mask;
     EXPECT_FALSE(mask.is_any_dirty());
 
     mask.mark_dirty(Flags::position);

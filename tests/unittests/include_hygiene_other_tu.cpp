@@ -12,7 +12,7 @@ struct Tag {
 }  // namespace
 
 std::size_t row_count_from_other_tu() {
-    soatable::SoaTable<Tag> table;
+    soatable::soa_table<Tag> table;
     static_cast<void>(table.insert());
     static_cast<void>(table.insert());
     return table.size();

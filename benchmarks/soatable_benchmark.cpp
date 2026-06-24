@@ -27,7 +27,7 @@ struct AOSRecord {
 
 static void BM_SoaTableSelect(benchmark::State& state) {
     const std::size_t row_count = static_cast<std::size_t>(state.range(0));
-    soatable::SoaTable<Temperature, Pressure, RegionId> table;
+    soatable::soa_table<Temperature, Pressure, RegionId> table;
     table.reserve(row_count);
 
     std::mt19937_64             rng(0x5A0A7EULL);

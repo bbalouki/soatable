@@ -13,7 +13,7 @@ struct Score {
 }  // namespace
 
 int main() {
-    soatable::SoaTable<Age> table;
+    soatable::soa_table<Age> table;
     const auto              id = table.insert();
     static_cast<void>(table.get<Score>(id));
     return 0;

@@ -20,7 +20,7 @@ struct Tag {
 }  // namespace
 
 TEST(IncludeHygieneTest, SstdAliasResolvesToSoatable) {
-    sstd::SoaTable<Tag> table;
+    sstd::soa_table<Tag> table;
     const auto          id = table.insert();
     table.assign<Tag>(id, 1);
     EXPECT_EQ(table.get<Tag>(id).value, 1);

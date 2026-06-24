@@ -7,6 +7,7 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <functional>
 #include <future>
 #include <limits>
@@ -25,14 +26,14 @@
 #define SOATABLE_HAS_PRINT 0
 #endif
 
-/// @brief The main namespace for the SoaTable library.
+/// @brief The main namespace for the soa_table library.
 namespace soatable {
 
 // =========================================
 // 1. Stable row identity and type helpers
 // =========================================
 
-/// @brief A stable identifier for a row in an SoaTable.
+/// @brief A stable identifier for a row in an soa_table.
 ///
 /// Contains an index into the row metadata and a generation count to prevent
 /// the ABA problem (referencing a new row with an old handle).
@@ -46,6 +47,14 @@ struct row_id {
     /// @param other The other row_id to compare against.
     /// @return True if both index and generation match, false otherwise.
     constexpr bool operator==(const row_id& other) const = default;
+};
+
+/// @brief Failure categories returned by the non-throwing std::expected accessors.
+enum class access_error {
+    /// @brief The row_id is stale or out of range.
+    invalid_row,
+    /// @brief The row is valid but does not carry the requested column.
+    missing_column,
 };
 
 /// @brief Helper concept to check if a type is present in a parameter pack.
@@ -87,7 +96,7 @@ struct index_of;
 template <typename T, typename... Types>
 struct index_of<T, std::tuple<Types...>> {
     static_assert(
-        sizeof...(Types) > 0, "SoaTable must contain at least one registered column type."
+        sizeof...(Types) > 0, "soa_table must contain at least one registered column type."
     );
 
     /// @brief Internal function to find the index of type T in the pack.
@@ -105,7 +114,7 @@ struct index_of<T, std::tuple<Types...>> {
     /// @brief The compile-time index of type T in Types....
     static constexpr std::size_t value = value_of();
     static_assert(
-        value < sizeof...(Types), "The requested type is not registered inside the SoaTable."
+        value < sizeof...(Types), "The requested type is not registered inside the soa_table."
     );
 };
 
@@ -166,7 +175,7 @@ template <typename T>
 using optional_value_type_t = typename optional_value_type<T>::type;
 
 /// @brief The return type of a selection query.
-/// @tparam Self The SoaTable type (const or non-const).
+/// @tparam Self The soa_table type (const or non-const).
 /// @tparam ReqColumns The requested column types.
 template <typename Self, typename... ReqColumns>
 using select_result_t = std::tuple<
@@ -298,8 +307,8 @@ struct packed_bits {
 /// @tparam DeltaType The type used for the delta (e.g., int16_t).
 /// @tparam ScaleM1000 The scale factor multiplied by 1000.
 template <typename T = double, typename DeltaType = std::int16_t, int ScaleM1000 = 10>
-class DeltaValue {
-    static_assert(ScaleM1000 > 0, "DeltaValue requires a positive scale.");
+class delta_value {
+    static_assert(ScaleM1000 > 0, "delta_value requires a positive scale.");
 
    private:
     T                       m_value {};
@@ -307,10 +316,10 @@ class DeltaValue {
 
    public:
     /// @brief Default constructor. Initializes the value to zero.
-    constexpr DeltaValue() = default;
+    constexpr delta_value() = default;
     /// @brief Construct with an initial value.
     /// @param initial The initial absolute value.
-    constexpr explicit DeltaValue(T initial) : m_value(initial) {}
+    constexpr explicit delta_value(T initial) : m_value(initial) {}
 
     /// @brief Set the absolute value.
     /// @param value The new absolute value.
@@ -346,8 +355,8 @@ class DeltaValue {
 /// @tparam MaskType The unsigned integer type used for the mask.
 template <typename EnumType, typename MaskType = std::uint32_t>
     requires std::is_enum_v<EnumType>
-class DirtyMask {
-    static_assert(std::is_unsigned_v<MaskType>, "DirtyMask requires an unsigned mask type.");
+class dirty_mask {
+    static_assert(std::is_unsigned_v<MaskType>, "dirty_mask requires an unsigned mask type.");
 
    private:
     MaskType m_mask = 0;
@@ -390,7 +399,7 @@ class DirtyMask {
 /// (storing the actual data and the back-mapping to row index).
 /// This allows for O(1) insertion, deletion, and iteration over present values.
 template <typename T>
-class ColumnVector {
+class column_vector {
    public:
     /// @brief Unsigned index type for dense and sparse positions.
     ///
@@ -410,7 +419,7 @@ class ColumnVector {
 
    public:
     /// @brief Default constructor.
-    ColumnVector() = default;
+    column_vector() = default;
 
     /// @brief Reserve capacity for the vectors.
     /// @param capacity The number of elements to reserve space for.
@@ -568,20 +577,96 @@ class ColumnVector {
     const std::vector<T>& raw_data() const { return m_data; }
 };
 
+// ===================================
+// 4. Reference-semantic row proxy
+// ===================================
+
+/// @brief A lightweight, reference-semantic view of one row over a set of required columns.
+///
+/// row_view models the tuple protocol, so structured bindings yield real references instead of the
+/// `std::reference_wrapper` tuples that select() returns:
+/// @code
+/// for (auto [id, pos, vel] : table.view<Position, Velocity>()) {
+///     pos.x += vel.x;  // pos and vel are real references into the columns.
+/// }
+/// // or, by column type:
+/// for (auto row : table.view<Position, Velocity>()) {
+///     row.get<Position>().x += row.get<Velocity>().x;
+/// }
+/// @endcode
+/// A row_view is invalidated by the same operations that invalidate column references (erase, sort).
+template <typename... Cols>
+class row_view {
+   public:
+    /// @brief Construct from a row identity and one pointer per viewed column.
+    /// @param id The identity of the row.
+    /// @param columns One pointer per column, in declaration order.
+    constexpr row_view(row_id id, Cols*... columns) noexcept : m_id(id), m_columns(columns...) {}
+
+    /// @brief The identity of this row.
+    [[nodiscard]] constexpr row_id id() const noexcept { return m_id; }
+
+    /// @brief Access a viewed column by its type.
+    /// @tparam T The column type, exactly as named in the view() call.
+    /// @return Reference to the column value.
+    template <typename T>
+    [[nodiscard]] constexpr T& get() const noexcept {
+        return *std::get<T*>(m_columns);
+    }
+
+    /// @brief Tuple-protocol accessor: index 0 is the row_id, indices 1..N are column references.
+    /// @tparam Index The structured-binding position.
+    template <std::size_t Index>
+    [[nodiscard]] constexpr decltype(auto) get() const noexcept {
+        if constexpr (Index == 0) {
+            return m_id;
+        } else {
+            return (*std::get<Index - 1>(m_columns));
+        }
+    }
+
+   private:
+    row_id               m_id;
+    std::tuple<Cols*...> m_columns;
+};
+
+/// @brief Maps a structured-binding index to the corresponding row_view element type.
+/// @tparam Index The binding position (0 is the row_id).
+/// @tparam Cols The viewed column types.
+template <std::size_t Index, typename... Cols>
+struct row_view_element {
+    /// @brief The element type at the given index.
+    using type = std::tuple_element_t<Index - 1, std::tuple<Cols...>>;
+};
+
+/// @brief Specialization for index 0, which yields the row identity.
+/// @tparam Cols The viewed column types.
+template <typename... Cols>
+struct row_view_element<0, Cols...> {
+    /// @brief The element type at index 0.
+    using type = row_id;
+};
+
 // ===========================
-// 4. Relational column table
+// 5. Relational column table
 // ===========================
 
 /// @brief A table where data is stored in sparse columns.
 ///
+/// @par Error-handling contract
+/// Accessors come in three flavours so callers can pick their failure mode:
+/// - get<T>()        throws std::out_of_range when the column is absent on the row.
+/// - try_get<T>()    returns nullptr when the column is absent or the row is invalid.
+/// - get_expected<T>() returns std::expected and never throws (for the no-exceptions audience).
+///
 /// @tparam Columns The types of the columns in the table. Each type must be unique.
 template <typename... Columns>
-class SoaTable {
+class soa_table {
    public:
-    static_assert(sizeof...(Columns) > 0, "SoaTable must contain at least one column type.");
+    static_assert(sizeof...(Columns) > 0, "soa_table must contain at least one column type.");
     static_assert(
         is_unique<Columns...>::value,
-        "All registered columns in an SoaTable must have unique types."
+        "All registered columns in an soa_table must have unique types."
     );
 
     /// @brief Total number of registered columns.
@@ -590,7 +675,7 @@ class SoaTable {
     using signature_type = std::bitset<column_count>;
 
     /// @brief Metadata for a single row slot.
-    struct RowMeta {
+    struct row_meta {
         /// @brief Generation count for handle stability.
         std::uint32_t generation = 0;
         /// @brief Bitmask of present columns.
@@ -609,7 +694,7 @@ class SoaTable {
     static constexpr std::uint32_t max_generation = std::numeric_limits<std::uint32_t>::max();
 
     /// @brief Metadata for all row slots.
-    std::vector<RowMeta> m_rows;
+    std::vector<row_meta> m_rows;
     /// @brief Linked list of free slots.
     std::vector<std::uint32_t> m_free_links;
     /// @brief Index of the first free slot.
@@ -617,7 +702,7 @@ class SoaTable {
     /// @brief Number of active rows.
     std::size_t m_alive_count = 0;
     /// @brief Storage for each column.
-    std::tuple<ColumnVector<Columns>...> m_columns;
+    std::tuple<column_vector<Columns>...> m_columns;
 
     /// @brief Internal check for index overflow.
     [[nodiscard]] static constexpr bool can_address_rows(std::size_t count) {
@@ -644,7 +729,7 @@ class SoaTable {
             const row_id id {row_index, self->m_rows[row_index].generation};
             auto         get_col = [&]<typename T>(std::uint32_t idx) {
                 using ActualT = detail::optional_value_type_t<T>;
-                auto* ptr     = std::get<ColumnVector<ActualT>>(self->m_columns).try_get(idx);
+                auto* ptr     = std::get<column_vector<ActualT>>(self->m_columns).try_get(idx);
                 if constexpr (detail::is_optional_v<T>) {
                     using ResT = std::optional<std::reference_wrapper<
                         std::conditional_t<std::is_const_v<Self>, const ActualT, ActualT>>>;
@@ -662,7 +747,7 @@ class SoaTable {
 
    public:
     /// @brief Default constructor.
-    SoaTable() = default;
+    soa_table() = default;
 
     /// @brief Number of active rows in the table.
     [[nodiscard]] std::size_t size() const noexcept { return m_alive_count; }
@@ -709,12 +794,12 @@ class SoaTable {
             m_rows[index].signature.reset();
         } else {
             if (!can_address_rows(m_rows.size() + 1)) {
-                throw std::overflow_error("SoaTable exhausted the row_id index space.");
+                throw std::overflow_error("soa_table exhausted the row_id index space.");
             }
             m_rows.reserve(m_rows.size() + 1);
             m_free_links.reserve(m_free_links.size() + 1);
             index = static_cast<std::uint32_t>(m_rows.size());
-            m_rows.push_back(RowMeta {});
+            m_rows.push_back(row_meta {});
             m_rows.back().alive = true;
             m_free_links.push_back(npos);
         }
@@ -749,7 +834,7 @@ class SoaTable {
 
         const std::uint32_t index = id.index;
 
-        auto clear_row_from_pool = [index]<typename T>(ColumnVector<T>& pool) {
+        auto clear_row_from_pool = [index]<typename T>(column_vector<T>& pool) {
             if (pool.contains(index)) {
                 pool.remove(index);
             }
@@ -778,7 +863,7 @@ class SoaTable {
     /// @param args Arguments to pass to the constructor of T.
     /// @return Reference to the assigned value.
     /// @note Strong exception guarantee when adding a new column value (delegates to the strong path
-    /// of ColumnVector::emplace); overwriting an existing value inherits T's assignment guarantee.
+    /// of column_vector::emplace); overwriting an existing value inherits T's assignment guarantee.
     /// @throws std::out_of_range If the row_id is invalid (thrown before any mutation).
     template <typename T, typename... Args>
         requires registered_column_v<T>
@@ -787,7 +872,7 @@ class SoaTable {
             throw std::out_of_range("assign() called with an invalid row_id.");
         }
 
-        auto& pool  = std::get<ColumnVector<T>>(m_columns);
+        auto& pool  = std::get<column_vector<T>>(m_columns);
         T&    value = pool.emplace(id.index, std::forward<Args>(args)...);
         m_rows[id.index].signature.set(index_of<T, std::tuple<Columns...>>::value);
         return value;
@@ -803,7 +888,7 @@ class SoaTable {
             return;
         }
 
-        auto& pool = std::get<ColumnVector<T>>(m_columns);
+        auto& pool = std::get<column_vector<T>>(m_columns);
         pool.remove(id.index);
         m_rows[id.index].signature.reset(index_of<T, std::tuple<Columns...>>::value);
     }
@@ -831,7 +916,7 @@ class SoaTable {
         if (!contains<T>(id)) {
             return nullptr;
         }
-        return std::get<ColumnVector<T>>(m_columns).try_get(id.index);
+        return std::get<column_vector<T>>(m_columns).try_get(id.index);
     }
 
     /// @brief Try to get a const pointer to the value of a column for the given row.
@@ -844,7 +929,7 @@ class SoaTable {
         if (!contains<T>(id)) {
             return nullptr;
         }
-        return std::get<ColumnVector<T>>(m_columns).try_get(id.index);
+        return std::get<column_vector<T>>(m_columns).try_get(id.index);
     }
 
     /// @brief Get a reference to the value of a column for the given row. Throws if not present.
@@ -876,6 +961,44 @@ class SoaTable {
             throw std::out_of_range("Requested column is not available on this row.");
         }
         return *value;
+    }
+
+    /// @brief Non-throwing accessor returning a column reference or an access_error.
+    /// @tparam T The type of the column.
+    /// @param id The row_id of the row.
+    /// @return The column reference on success, or an access_error describing the failure.
+    /// @note Never throws. Intended for hot paths and no-exceptions builds.
+    template <typename T>
+        requires registered_column_v<T>
+    [[nodiscard]] std::expected<std::reference_wrapper<T>, access_error> get_expected(row_id id) {
+        if (!is_valid(id)) {
+            return std::unexpected(access_error::invalid_row);
+        }
+        T* value = std::get<column_vector<T>>(m_columns).try_get(id.index);
+        if (value == nullptr) {
+            return std::unexpected(access_error::missing_column);
+        }
+        return std::reference_wrapper<T>(*value);
+    }
+
+    /// @brief Non-throwing const accessor returning a const column reference or an access_error.
+    /// @tparam T The type of the column.
+    /// @param id The row_id of the row.
+    /// @return The const column reference on success, or an access_error describing the failure.
+    /// @note Never throws.
+    template <typename T>
+        requires registered_column_v<T>
+    [[nodiscard]] std::expected<std::reference_wrapper<const T>, access_error> get_expected(
+        row_id id
+    ) const {
+        if (!is_valid(id)) {
+            return std::unexpected(access_error::invalid_row);
+        }
+        const T* value = std::get<column_vector<T>>(m_columns).try_get(id.index);
+        if (value == nullptr) {
+            return std::unexpected(access_error::missing_column);
+        }
+        return std::reference_wrapper<const T>(*value);
     }
 
     /// @brief Iterate over all alive row IDs.
@@ -913,7 +1036,7 @@ class SoaTable {
         );
         static_assert(
             (registered_column_v<detail::optional_value_type_t<ReqColumns>> && ...),
-            "One or more requested columns are not registered inside the SoaTable schema."
+            "One or more requested columns are not registered inside the soa_table schema."
         );
 
         signature_type required_mask;
@@ -932,7 +1055,7 @@ class SoaTable {
                        return m_rows[row_index].alive;
                    }) |
                    std::views::transform([this](std::size_t row_index) {
-                       return get_transform_func<SoaTable, ReqColumns...>(this)(
+                       return get_transform_func<soa_table, ReqColumns...>(this)(
                            static_cast<std::uint32_t>(row_index)
                        );
                    });
@@ -943,7 +1066,7 @@ class SoaTable {
             (
                 [&] {
                     if constexpr (!detail::is_optional_v<ReqColumns>) {
-                        auto& pool = std::get<ColumnVector<ReqColumns>>(m_columns);
+                        auto& pool = std::get<column_vector<ReqColumns>>(m_columns);
                         if (pool.size() < min_size) {
                             min_size     = pool.size();
                             driver_dense = &pool.dense_rows();
@@ -960,7 +1083,7 @@ class SoaTable {
             };
 
             return *driver_dense | std::views::filter(std::move(filter_func)) |
-                   std::views::transform(get_transform_func<SoaTable, ReqColumns...>(this));
+                   std::views::transform(get_transform_func<soa_table, ReqColumns...>(this));
         }
     }
 
@@ -974,7 +1097,7 @@ class SoaTable {
         );
         static_assert(
             (registered_column_v<detail::optional_value_type_t<ReqColumns>> && ...),
-            "One or more requested columns are not registered inside the SoaTable schema."
+            "One or more requested columns are not registered inside the soa_table schema."
         );
 
         signature_type required_mask;
@@ -993,7 +1116,7 @@ class SoaTable {
                        return m_rows[row_index].alive;
                    }) |
                    std::views::transform([this](std::size_t row_index) {
-                       return get_transform_func<const SoaTable, ReqColumns...>(this)(
+                       return get_transform_func<const soa_table, ReqColumns...>(this)(
                            static_cast<std::uint32_t>(row_index)
                        );
                    });
@@ -1004,7 +1127,7 @@ class SoaTable {
             (
                 [&] {
                     if constexpr (!detail::is_optional_v<ReqColumns>) {
-                        auto& pool = std::get<ColumnVector<ReqColumns>>(m_columns);
+                        auto& pool = std::get<column_vector<ReqColumns>>(m_columns);
                         if (pool.size() < min_size) {
                             min_size     = pool.size();
                             driver_dense = &pool.dense_rows();
@@ -1021,8 +1144,49 @@ class SoaTable {
             };
 
             return *driver_dense | std::views::filter(std::move(filter_func)) |
-                   std::views::transform(get_transform_func<const SoaTable, ReqColumns...>(this));
+                   std::views::transform(get_transform_func<const soa_table, ReqColumns...>(this));
         }
+    }
+
+    /// @brief Select rows that have all specified columns and view them as reference-semantic rows.
+    /// @tparam ReqColumns The requested column types (optional columns are not supported here).
+    /// @return A range of row_view proxies supporting structured bindings to real references.
+    /// @note Built on select(); a row_view is invalidated by the same operations (erase, sort).
+    template <typename... ReqColumns>
+    [[nodiscard]] auto view() {
+        static_assert(sizeof...(ReqColumns) > 0, "Must provide at least one column type to view.");
+        static_assert(
+            (!detail::is_optional_v<ReqColumns> && ...),
+            "view() supports required columns only; use select() for optional columns."
+        );
+        return select<ReqColumns...>() | std::views::transform([](auto projected) {
+                   return std::apply(
+                       [](row_id id, auto&... refs) {
+                           return row_view<ReqColumns...>(id, std::addressof(refs.get())...);
+                       },
+                       projected
+                   );
+               });
+    }
+
+    /// @brief Const overload of view(); yields row_view proxies over const column references.
+    /// @tparam ReqColumns The requested column types (optional columns are not supported here).
+    /// @return A range of row_view proxies over const references.
+    template <typename... ReqColumns>
+    [[nodiscard]] auto view() const {
+        static_assert(sizeof...(ReqColumns) > 0, "Must provide at least one column type to view.");
+        static_assert(
+            (!detail::is_optional_v<ReqColumns> && ...),
+            "view() supports required columns only; use select() for optional columns."
+        );
+        return select<ReqColumns...>() | std::views::transform([](auto projected) {
+                   return std::apply(
+                       [](row_id id, auto&... refs) {
+                           return row_view<const ReqColumns...>(id, std::addressof(refs.get())...);
+                       },
+                       projected
+                   );
+               });
     }
 
     /// @brief Fast batch insertion of multiple rows.
@@ -1045,7 +1209,7 @@ class SoaTable {
     template <typename T, typename InputIt>
         requires registered_column_v<T>
     void assign_batch(const std::vector<row_id>& ids, InputIt first) {
-        auto& pool = std::get<ColumnVector<T>>(m_columns);
+        auto& pool = std::get<column_vector<T>>(m_columns);
         auto  it   = first;
         for (auto id : ids) {
             if (is_valid(id)) {
@@ -1060,7 +1224,7 @@ class SoaTable {
     /// criteria.
     /// @tparam SortCriteria The types of the comparison criteria.
     /// @param criteria The comparison criteria. Each should be a pair of (ColumnType, Comparator).
-    /// @note Basic exception guarantee: each column is reordered in turn (see ColumnVector::reorder),
+    /// @note Basic exception guarantee: each column is reordered in turn (see column_vector::reorder),
     /// so a throwing element move leaves the table valid but only partially reordered.
     template <typename... SortCriteria>
     void sort_by_multi(SortCriteria&&... criteria) {
@@ -1079,7 +1243,7 @@ class SoaTable {
             bool decided =
                 (([&] {
                      using T     = typename std::decay_t<SortCriteria>::first_type;
-                     auto& pool  = std::get<ColumnVector<T>>(m_columns);
+                     auto& pool  = std::get<column_vector<T>>(m_columns);
                      bool  has_a = pool.contains(a);
                      bool  has_b = pool.contains(b);
                      if (has_a && has_b) {
@@ -1115,11 +1279,11 @@ class SoaTable {
     /// @tparam T The type of the column to sort by.
     /// @tparam Compare The type of the comparator.
     /// @param comp The comparator to use for sorting values of type T.
-    /// @note Basic exception guarantee (see ColumnVector::reorder).
+    /// @note Basic exception guarantee (see column_vector::reorder).
     template <typename T, typename Compare>
         requires registered_column_v<T>
     void sort_by_column(Compare&& comp) {
-        auto&       pool  = std::get<ColumnVector<T>>(m_columns);
+        auto&       pool  = std::get<column_vector<T>>(m_columns);
         const auto& dense = pool.dense_rows();
 
         std::vector<std::uint32_t> sorted_rows = dense;
@@ -1154,7 +1318,7 @@ class SoaTable {
             return;
         }
 
-        auto&       pool  = std::get<ColumnVector<T>>(m_columns);
+        auto&       pool  = std::get<column_vector<T>>(m_columns);
         const auto& dense = pool.dense_rows();
 
         std::vector<std::uint32_t> sorted_rows = dense;
@@ -1199,33 +1363,33 @@ class SoaTable {
 
 /// @brief A convenience wrapper around a row_id and a reference to its table.
 template <typename... RegisteredColumns>
-struct RowHandle {
+struct row_handle {
     /// @brief The ID of the row.
     row_id id {};
     /// @brief Pointer to the table containing the row.
-    SoaTable<RegisteredColumns...>* table = nullptr;
+    soa_table<RegisteredColumns...>* table = nullptr;
 
     /// @brief Default constructor. Creates an unbound and invalid handle.
-    constexpr RowHandle() = default;
+    constexpr row_handle() = default;
     /// @brief Construct from a row_id and table reference.
     /// @param row The row_id to wrap.
     /// @param table_ref The table that contains the row.
-    constexpr RowHandle(row_id row, SoaTable<RegisteredColumns...>& table_ref)
+    constexpr row_handle(row_id row, soa_table<RegisteredColumns...>& table_ref)
         : id(row), table(&table_ref) {}
 
    private:
     /// @brief Ensure the table is bound.
-    [[nodiscard]] SoaTable<RegisteredColumns...>& require_table() {
+    [[nodiscard]] soa_table<RegisteredColumns...>& require_table() {
         if (table == nullptr) {
-            throw std::logic_error("RowHandle is not bound to a table.");
+            throw std::logic_error("row_handle is not bound to a table.");
         }
         return *table;
     }
 
     /// @brief Ensure the table is bound (const).
-    [[nodiscard]] const SoaTable<RegisteredColumns...>& require_table() const {
+    [[nodiscard]] const soa_table<RegisteredColumns...>& require_table() const {
         if (table == nullptr) {
-            throw std::logic_error("RowHandle is not bound to a table.");
+            throw std::logic_error("row_handle is not bound to a table.");
         }
         return *table;
     }
@@ -1307,6 +1471,34 @@ struct RowHandle {
     }
 };
 
+// =====================================
+// 6. Deprecated PascalCase type aliases
+// =====================================
+
+// The public API uses std-style lowercase names (soa_table, row_handle, column_vector,
+// delta_value, dirty_mask). The previous PascalCase spellings remain as deprecated aliases for one
+// migration window; they will be removed in a future major release.
+
+/// @deprecated Renamed to soa_table.
+template <typename... Columns>
+using SoaTable [[deprecated("Renamed to soa_table.")]] = soa_table<Columns...>;
+
+/// @deprecated Renamed to row_handle.
+template <typename... RegisteredColumns>
+using RowHandle [[deprecated("Renamed to row_handle.")]] = row_handle<RegisteredColumns...>;
+
+/// @deprecated Renamed to column_vector.
+template <typename T>
+using ColumnVector [[deprecated("Renamed to column_vector.")]] = column_vector<T>;
+
+/// @deprecated Renamed to delta_value.
+template <typename T = double, typename DeltaType = std::int16_t, int ScaleM1000 = 10>
+using DeltaValue [[deprecated("Renamed to delta_value.")]] = delta_value<T, DeltaType, ScaleM1000>;
+
+/// @deprecated Renamed to dirty_mask.
+template <typename EnumType, typename MaskType = std::uint32_t>
+using DirtyMask [[deprecated("Renamed to dirty_mask.")]] = dirty_mask<EnumType, MaskType>;
+
 }  // namespace soatable
 
 #ifdef SOATABLE_ENABLE_SSTD_ALIAS
@@ -1316,3 +1508,23 @@ struct RowHandle {
 /// because a short top-level namespace alias is prone to collisions in large downstream builds.
 namespace sstd = soatable;
 #endif
+
+// Tuple-protocol opt-in for row_view so structured bindings yield real column references.
+namespace std {
+
+/// @brief Number of structured-binding elements in a row_view (the row_id plus each column).
+/// @tparam Cols The viewed column types.
+template <typename... Cols>
+struct tuple_size<soatable::row_view<Cols...>>
+    : std::integral_constant<std::size_t, sizeof...(Cols) + 1> {};
+
+/// @brief Type of the Index-th structured-binding element of a row_view.
+/// @tparam Index The binding position (0 is the row_id).
+/// @tparam Cols The viewed column types.
+template <std::size_t Index, typename... Cols>
+struct tuple_element<Index, soatable::row_view<Cols...>> {
+    /// @brief The element type at the given index.
+    using type = typename soatable::row_view_element<Index, Cols...>::type;
+};
+
+}  // namespace std

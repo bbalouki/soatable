@@ -36,6 +36,10 @@ set(SOATABLE_UNIT_TEST_SOURCES
     unittests/compression_test.cpp
     unittests/exception_safety_test.cpp
     unittests/invariant_test.cpp
+    unittests/view_test.cpp
+    unittests/expected_test.cpp
+    unittests/const_correctness_test.cpp
+    unittests/deprecated_alias_test.cpp
     unittests/include_hygiene_test.cpp
     unittests/include_hygiene_other_tu.cpp
 )
