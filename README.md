@@ -189,6 +189,16 @@ int main() {
 }
 ```
 
+## Domain Cookbooks
+
+Worked, runnable examples showing SoaTable in each target domain (built as
+`soatable_cookbook_*` targets):
+
+- [Finance — tick store](example/cookbook/finance_tick_store.cpp): ingest trades, derive P&L per row, aggregate notional volume per symbol.
+- [Game / ECS](example/cookbook/game_ecs.cpp): a sparse-component world with a motion system over `view<Position, Velocity>()`.
+- [Aerospace — telemetry](example/cookbook/aerospace_telemetry.cpp): `delta_value` altitude tracking, `dirty_mask` per-frame flags, and a validity bitmap.
+- [Scientific data](example/cookbook/scientific_table.cpp): zero-copy span compute and `quantized_float` confidence storage.
+
 ## Installation
 
 SoaTable is header-only and requires a C++23 compiler and CMake 3.25+.

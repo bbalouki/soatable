@@ -11,7 +11,7 @@
 #define OUT_PRINTLN(...) std::println(__VA_ARGS__)
 #else
 #include <format>
-#define OUT_PRINTLN(...) std::cout << std::format(__VA_ARGS__) << std::endl
+#define OUT_PRINTLN(...) std::cout << std::format(__VA_ARGS__) << '\n'
 #endif
 
 struct CashFlow {
