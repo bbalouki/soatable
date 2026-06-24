@@ -43,6 +43,14 @@ Foundational layout primitives (FEATURES Phase A) and the start of the compute l
 - Time-series helpers in `<soatable/timeseries.hpp>`: `rolling_sum` / `rolling_mean` / `deltas` over
   column spans, `rolling_mean_column` with a projection, and `for_each_dirty` dirty-region scans for
   incremental recompute (E.4).
+- Debugger visualizers under `tools/visualizers/`: an MSVC `.natvis` and GDB pretty-printers for the
+  key types, installed with the package (E.2).
+- Dimensional-safety units in `<soatable/units.hpp>`: a `quantity<T, Dimension>` whose add/subtract
+  require matching dimensions (compile error otherwise) and whose multiply/divide combine dimensions;
+  usable directly as column types (E.3).
+- Runtime schema evolution in `<soatable/dynamic.hpp>`: a `dynamic_table` that adds/removes typed
+  columns at runtime, type-checks access without RTTI, stores cells sparsely, and carries per-column
+  string metadata (E.3).
 
 - `column<T>()` (and a `const` overload) returning a `std::span` over a column's dense values, plus
   `row_indices<T>()` and `make_row_id()` to map dense positions back to stable handles (A.1).

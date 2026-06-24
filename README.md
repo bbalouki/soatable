@@ -75,6 +75,10 @@ In our benchmarks, SoaTable's `select` queries are often **5x to 15x faster** th
 - **Freestanding / No-Exceptions:** define `SOATABLE_NO_EXCEPTIONS` to build without throwing (and without RTTI) for embedded / flight / kernel contexts, using `get_expected<T>()` for error handling.
 - **Chunked Storage & Concurrency:** `chunked_soa_table<ChunkSize, ...>` exposes Arrow-style record batches with `compute::transform_column_parallel`; opt-in `<soatable/concurrent.hpp>` `synchronized_table` gives many-reader / one-writer access via scoped `read()` / `write()`.
 - **Out-of-Core Columns:** opt-in `<soatable/mmap.hpp>` `mmap_soa_table` backs columns with demand-paged memory-mapped storage so a column can exceed physical RAM, paged in lazily by the OS.
+- **Time-Series Helpers:** opt-in `<soatable/timeseries.hpp>` adds rolling windows, deltas, and dirty-region scans built on `delta_value` / `dirty_mask`.
+- **Dimensional Safety:** opt-in `<soatable/units.hpp>` `quantity<T, Dimension>` rejects adding metres to seconds at compile time; usable as a column type.
+- **Runtime Schema Evolution:** opt-in `<soatable/dynamic.hpp>` `dynamic_table` adds/removes typed columns at runtime with per-column metadata.
+- **Debugger Visualizers:** MSVC `.natvis` and GDB pretty-printers under `tools/visualizers/`.
 
 ### Naming
 

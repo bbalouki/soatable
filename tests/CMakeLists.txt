@@ -49,6 +49,8 @@ set(SOATABLE_UNIT_TEST_SOURCES
     unittests/concurrent_test.cpp
     unittests/mmap_test.cpp
     unittests/timeseries_test.cpp
+    unittests/units_test.cpp
+    unittests/dynamic_test.cpp
     unittests/const_correctness_test.cpp
     unittests/deprecated_alias_test.cpp
     unittests/include_hygiene_test.cpp
@@ -82,6 +84,7 @@ set(SOATABLE_COMPILE_FAIL_CASES
     duplicate_columns
     unregistered_column
     empty_table
+    dimension_mismatch
 )
 
 foreach(case IN LISTS SOATABLE_COMPILE_FAIL_CASES)
