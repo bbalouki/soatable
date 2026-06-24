@@ -1,18 +1,15 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(soatable VERSION 0.1.0 LANGUAGES CXX)
+project(SOATABLE VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON) 
 
 set(FETCHCONTENT_BASE_DIR "${CMAKE_SOURCE_DIR}/.cache/_deps")
+include(${CMAKE_SOURCE_DIR}/cmake/Helpers.cmake)
+include(${CMAKE_SOURCE_DIR}/cmake/Versions.cmake)
 
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
-
-option(SOATABLE_BUILD_EXAMPLES "Build the SoaTable example program" ON)
-option(SOATABLE_BUILD_BENCHMARKS "Build the SoaTable benchmark program" ON)
-option(SOATABLE_BUILD_TESTS "Build the SoaTable tests" ON)
-
 
 add_library(soatable INTERFACE)
 add_library(soatable::soatable ALIAS soatable)
