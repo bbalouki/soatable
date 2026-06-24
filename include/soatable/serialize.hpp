@@ -34,11 +34,12 @@ enum class serialize_status {
 
 namespace detail {
 
-/// @brief Friend accessor exposing soa_table's private state to the serializer only.
+/// @brief Friend accessor exposing a table's private state to the serializer only.
+/// @tparam Storage The table's storage policy.
 /// @tparam Columns The table's column types.
-template <typename... Columns>
+template <typename Storage, typename... Columns>
 struct table_access {
-    using table_type = soa_table<Columns...>;
+    using table_type = basic_soa_table<Storage, Columns...>;
 
     static auto&          rows(table_type& t) noexcept { return t.m_rows; }
     static const auto&    rows(const table_type& t) noexcept { return t.m_rows; }
@@ -128,18 +129,18 @@ struct byte_reader {
 /// @tparam Columns The table's column types.
 /// @param table The table to serialize.
 /// @return A byte buffer that load() can reconstruct the table from.
-template <typename... Columns>
-[[nodiscard]] std::vector<std::byte> save(const soa_table<Columns...>& table) {
+template <typename Storage, typename... Columns>
+[[nodiscard]] std::vector<std::byte> save(const basic_soa_table<Storage, Columns...>& table) {
     static_assert(
         (std::is_trivially_copyable_v<Columns> && ...),
         "save() requires every column type to be trivially copyable."
     );
     static_assert(
-        soa_table<Columns...>::column_count <= 64,
+        basic_soa_table<Storage, Columns...>::column_count <= 64,
         "save() supports up to 64 columns (the signature is stored as a 64-bit word)."
     );
 
-    using access = detail::table_access<Columns...>;
+    using access = detail::table_access<Storage, Columns...>;
     std::vector<std::byte> out;
 
     const auto& rows       = access::rows(table);
@@ -164,16 +165,24 @@ template <typename... Columns>
         [&out](const auto&... pool) {
             (
                 [&out](const auto& column_pool) {
-                    using value_type  = std::decay_t<decltype(column_pool.raw_data()[0])>;
                     const auto& dense = column_pool.dense_rows();
                     const auto& data  = column_pool.raw_data();
                     detail::append_pod(out, static_cast<std::uint64_t>(dense.size()));
                     detail::append_array(
                         out, std::span<const std::uint32_t>(dense.data(), dense.size())
                     );
-                    detail::append_array(
-                        out, std::span<const value_type>(data.data(), data.size())
-                    );
+                    using pool_type = std::decay_t<decltype(column_pool)>;
+                    if constexpr (pool_type::is_contiguous) {
+                        using value_type = std::decay_t<decltype(data[0])>;
+                        detail::append_array(
+                            out, std::span<const value_type>(data.data(), data.size())
+                        );
+                    } else {
+                        // Tiled storage is not contiguous; write each value individually.
+                        for (std::size_t i = 0; i < data.size(); ++i) {
+                            detail::append_pod(out, data[i]);
+                        }
+                    }
                 }(pool),
                 ...);
         },
@@ -188,20 +197,20 @@ template <typename... Columns>
 /// @param table The table to overwrite (cleared first).
 /// @param bytes The serialized buffer.
 /// @return serialize_status::ok on success, or the reason the buffer was rejected.
-template <typename... Columns>
+template <typename Storage, typename... Columns>
 [[nodiscard]] serialize_status load(
-    soa_table<Columns...>& table, std::span<const std::byte> bytes
+    basic_soa_table<Storage, Columns...>& table, std::span<const std::byte> bytes
 ) {
     static_assert(
         (std::is_trivially_copyable_v<Columns> && ...),
         "load() requires every column type to be trivially copyable."
     );
     static_assert(
-        soa_table<Columns...>::column_count <= 64,
+        basic_soa_table<Storage, Columns...>::column_count <= 64,
         "load() supports up to 64 columns (the signature is stored as a 64-bit word)."
     );
 
-    using access = detail::table_access<Columns...>;
+    using access = detail::table_access<Storage, Columns...>;
 
     detail::byte_reader reader {bytes};
 
@@ -234,7 +243,7 @@ template <typename... Columns>
     for (auto& meta : rows) {
         meta.generation = reader.read_pod<std::uint32_t>();
         const auto sig  = reader.read_pod<std::uint64_t>();
-        meta.signature  = typename soa_table<Columns...>::signature_type {sig};
+        meta.signature  = typename basic_soa_table<Storage, Columns...>::signature_type {sig};
         meta.alive      = reader.read_pod<std::uint8_t>() != 0;
     }
 

@@ -20,7 +20,12 @@ Foundational layout primitives (FEATURES Phase A).
   (A.4).
 - SIMD-aligned column storage: dense column data is over-aligned to `simd_alignment` (64 bytes,
   matching Apache Arrow) via an internal aligned allocator, so `column<T>()` spans are ready for
-  aligned SIMD loads (A.2, alignment half). The optional AoSoA tiled layout remains pending.
+  aligned SIMD loads (A.2).
+- Opt-in AoSoA tiled storage: `aosoa_table<TileSize, Columns...>` stores each column's dense values
+  in fixed-size, individually over-aligned tiles (bounded reallocation; per-tile SIMD), selected via
+  a storage policy on the new `basic_soa_table<Storage, Columns...>`. `soa_table` is the unchanged
+  contiguous default. `column_tiles<T>()` gives a uniform per-tile span view across both policies
+  (A.2).
 
 ## [0.3.0] - 2026-06-24
 

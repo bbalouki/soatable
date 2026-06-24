@@ -138,9 +138,10 @@ inline constexpr std::size_t column_alignment =
 namespace detail {
 
 /// @brief Friend accessor granting the opt-in <soatable/serialize.hpp> header access to the private
-/// state of a soa_table without widening its public surface. Defined only in that header.
+/// state of a basic_soa_table without widening its public surface. Defined only in that header.
+/// @tparam Storage The table's storage policy.
 /// @tparam Columns The table's column types.
-template <typename... Columns>
+template <typename Storage, typename... Columns>
 struct table_access;
 
 /// @brief A standard-conforming allocator that over-aligns its allocations to Alignment bytes.
@@ -194,6 +195,96 @@ struct aligned_allocator {
 /// @tparam T The element type.
 template <typename T>
 using aligned_vector = std::vector<T, aligned_allocator<T>>;
+
+/// @brief A tiled (AoSoA-style) dense container: a sequence of fixed-size, individually over-aligned
+/// tiles. Growth appends a tile and never copies existing tiles, bounding reallocation cost.
+/// @tparam T The element type.
+/// @tparam TileSize The number of elements per tile.
+///
+/// Exposes the subset of the std::vector interface that column_vector relies on, so it is a drop-in
+/// alternative storage backend. Elements are not contiguous across tiles, so it is non-contiguous.
+template <typename T, std::size_t TileSize>
+class tiled_vector {
+    static_assert(TileSize > 0, "tiled_vector requires a positive tile size.");
+
+   public:
+    /// @brief Number of stored elements.
+    [[nodiscard]] std::size_t size() const noexcept { return m_size; }
+    /// @brief Whether the container is empty.
+    [[nodiscard]] bool empty() const noexcept { return m_size == 0; }
+
+    /// @brief Mutable element access by flat index.
+    [[nodiscard]] T& operator[](std::size_t index) {
+        return m_tiles[index / TileSize][index % TileSize];
+    }
+    /// @brief Const element access by flat index.
+    [[nodiscard]] const T& operator[](std::size_t index) const {
+        return m_tiles[index / TileSize][index % TileSize];
+    }
+
+    /// @brief Construct an element at the end, allocating a new tile when the last one is full.
+    template <typename... Args>
+    T& emplace_back(Args&&... args) {
+        if (m_tiles.empty() || m_tiles.back().size() == TileSize) {
+            m_tiles.emplace_back();
+            m_tiles.back().reserve(TileSize);
+        }
+        T& ref = m_tiles.back().emplace_back(std::forward<Args>(args)...);
+        ++m_size;
+        return ref;
+    }
+
+    /// @brief Append a value at the end.
+    void push_back(const T& value) { emplace_back(value); }
+    /// @brief Append a value at the end (move).
+    void push_back(T&& value) { emplace_back(std::move(value)); }
+
+    /// @brief The last element.
+    [[nodiscard]] T& back() { return m_tiles.back().back(); }
+
+    /// @brief Remove the last element, dropping the trailing tile when it becomes empty.
+    void pop_back() {
+        m_tiles.back().pop_back();
+        if (m_tiles.back().empty()) {
+            m_tiles.pop_back();
+        }
+        --m_size;
+    }
+
+    /// @brief Reserve capacity for at least the given number of elements (rounded up to tiles).
+    void reserve(std::size_t capacity) {
+        m_tiles.reserve((capacity + TileSize - 1) / TileSize);
+    }
+
+    /// @brief Remove all elements.
+    void clear() noexcept {
+        m_tiles.clear();
+        m_size = 0;
+    }
+
+    /// @brief Release unused capacity.
+    void shrink_to_fit() {
+        for (auto& tile_data : m_tiles) {
+            tile_data.shrink_to_fit();
+        }
+        m_tiles.shrink_to_fit();
+    }
+
+    /// @brief Number of tiles currently allocated.
+    [[nodiscard]] std::size_t tile_count() const noexcept { return m_tiles.size(); }
+    /// @brief A contiguous, over-aligned span over one tile's live elements.
+    [[nodiscard]] std::span<T> tile(std::size_t tile_index) {
+        return std::span<T>(m_tiles[tile_index].data(), m_tiles[tile_index].size());
+    }
+    /// @brief A contiguous, over-aligned const span over one tile's live elements.
+    [[nodiscard]] std::span<const T> tile(std::size_t tile_index) const {
+        return std::span<const T>(m_tiles[tile_index].data(), m_tiles[tile_index].size());
+    }
+
+   private:
+    std::vector<aligned_vector<T>> m_tiles;
+    std::size_t                    m_size = 0;
+};
 
 /// @brief Generates a mask with the specified number of low bits set.
 /// @tparam UInt The unsigned integer type.
@@ -266,6 +357,35 @@ using select_result_t = std::tuple<
             optional_value_type_t<ReqColumns>>>>...>;
 
 }  // namespace detail
+
+// =================================
+// 1b. Column storage policies
+// =================================
+
+/// @brief Storage policy: a flat, contiguous, over-aligned column (the default Structure-of-Arrays
+/// layout). column<T>() exposes a single contiguous span.
+struct soa_layout {
+    /// @brief The dense container backing a column of T.
+    template <typename T>
+    using container_type = detail::aligned_vector<T>;
+    /// @brief Whether a column is a single contiguous block.
+    static constexpr bool is_contiguous = true;
+};
+
+/// @brief Storage policy: a tiled (AoSoA-style) column whose dense values live in fixed-size,
+/// individually over-aligned tiles. Bounds reallocation cost on growth and is the natural unit for
+/// chunked SIMD kernels; not contiguous, so use column_tiles<T>() instead of column<T>().
+/// @tparam TileSize The number of elements per tile.
+template <std::size_t TileSize>
+struct aosoa_layout {
+    /// @brief The dense container backing a column of T.
+    template <typename T>
+    using container_type = detail::tiled_vector<T, TileSize>;
+    /// @brief Tiled columns are not a single contiguous block.
+    static constexpr bool is_contiguous = false;
+    /// @brief The number of elements per tile.
+    static constexpr std::size_t tile_size = TileSize;
+};
 
 // =================================
 // 2. Compression and state helpers
@@ -544,7 +664,9 @@ class bitmap {
 /// Uses a sparse array (mapping row index to dense index) and a dense array
 /// (storing the actual data and the back-mapping to row index).
 /// This allows for O(1) insertion, deletion, and iteration over present values.
-template <typename T>
+/// @tparam T The column value type.
+/// @tparam Storage The storage policy selecting the dense backend (soa_layout or aosoa_layout).
+template <typename T, typename Storage = soa_layout>
 class column_vector {
    public:
     /// @brief Unsigned index type for dense and sparse positions.
@@ -552,8 +674,10 @@ class column_vector {
     /// Widening this to `std::uint64_t` is the single change required for a 64-bit build; every
     /// internal index derives from it. Kept at 32 bits to match `row_id::index`.
     using size_type = std::uint32_t;
-    /// @brief The dense storage type: a vector over-aligned to column_alignment<T> for SIMD loads.
-    using data_vector = detail::aligned_vector<T>;
+    /// @brief The dense storage type chosen by the storage policy.
+    using data_vector = typename Storage::template container_type<T>;
+    /// @brief Whether the dense storage is a single contiguous block.
+    static constexpr bool is_contiguous = Storage::is_contiguous;
 
    private:
     /// @brief Sentinel stored in m_sparse for a row that has no value in this column.
@@ -809,9 +933,11 @@ struct row_view_element<0, Cols...> {
 /// - try_get<T>()    returns nullptr when the column is absent or the row is invalid.
 /// - get_expected<T>() returns std::expected and never throws (for the no-exceptions audience).
 ///
+/// @tparam Storage The column storage policy (soa_layout by default, or aosoa_layout<TileSize>).
 /// @tparam Columns The types of the columns in the table. Each type must be unique.
-template <typename... Columns>
-class soa_table {
+/// @note Use the soa_table / aosoa_table aliases rather than naming basic_soa_table directly.
+template <typename Storage, typename... Columns>
+class basic_soa_table {
    public:
     static_assert(sizeof...(Columns) > 0, "soa_table must contain at least one column type.");
     static_assert(
@@ -858,11 +984,11 @@ class soa_table {
     std::uint32_t m_free_head = npos;
     /// @brief Number of active rows.
     std::size_t m_alive_count = 0;
-    /// @brief Storage for each column.
-    std::tuple<column_vector<Columns>...> m_columns;
+    /// @brief Storage for each column, using the selected storage policy.
+    std::tuple<column_vector<Columns, Storage>...> m_columns;
 
     /// @brief Grants the opt-in serialization header access to the private state above.
-    friend struct detail::table_access<Columns...>;
+    friend struct detail::table_access<Storage, Columns...>;
 
     /// @brief Internal check for index overflow.
     [[nodiscard]] static constexpr bool can_address_rows(std::size_t count) {
@@ -889,7 +1015,7 @@ class soa_table {
             const row_id id {row_index, self->m_rows[row_index].generation};
             auto         get_col = [&]<typename T>(std::uint32_t idx) {
                 using ActualT = detail::optional_value_type_t<T>;
-                auto* ptr     = std::get<column_vector<ActualT>>(self->m_columns).try_get(idx);
+                auto* ptr = std::get<column_vector<ActualT, Storage>>(self->m_columns).try_get(idx);
                 if constexpr (detail::is_optional_v<T>) {
                     using ResT = std::optional<std::reference_wrapper<
                         std::conditional_t<std::is_const_v<Self>, const ActualT, ActualT>>>;
@@ -907,7 +1033,7 @@ class soa_table {
 
    public:
     /// @brief Default constructor.
-    soa_table() = default;
+    basic_soa_table() = default;
 
     /// @brief Number of active rows in the table.
     [[nodiscard]] std::size_t size() const noexcept { return m_alive_count; }
@@ -995,7 +1121,7 @@ class soa_table {
 
         const std::uint32_t index = id.index;
 
-        auto clear_row_from_pool = [index]<typename T>(column_vector<T>& pool) {
+        auto clear_row_from_pool = [index]<typename T>(column_vector<T, Storage>& pool) {
             if (pool.contains(index)) {
                 pool.remove(index);
             }
@@ -1034,7 +1160,7 @@ class soa_table {
             throw std::out_of_range("assign() called with an invalid row_id.");
         }
 
-        auto& pool  = std::get<column_vector<T>>(m_columns);
+        auto& pool  = std::get<column_vector<T, Storage>>(m_columns);
         T&    value = pool.emplace(id.index, std::forward<Args>(args)...);
         m_rows[id.index].signature.set(index_of<T, std::tuple<Columns...>>::value);
         return value;
@@ -1050,7 +1176,7 @@ class soa_table {
             return;
         }
 
-        auto& pool = std::get<column_vector<T>>(m_columns);
+        auto& pool = std::get<column_vector<T, Storage>>(m_columns);
         pool.remove(id.index);
         m_rows[id.index].signature.reset(index_of<T, std::tuple<Columns...>>::value);
     }
@@ -1078,7 +1204,7 @@ class soa_table {
         if (!contains<T>(id)) {
             return nullptr;
         }
-        return std::get<column_vector<T>>(m_columns).try_get(id.index);
+        return std::get<column_vector<T, Storage>>(m_columns).try_get(id.index);
     }
 
     /// @brief Try to get a const pointer to the value of a column for the given row.
@@ -1091,7 +1217,7 @@ class soa_table {
         if (!contains<T>(id)) {
             return nullptr;
         }
-        return std::get<column_vector<T>>(m_columns).try_get(id.index);
+        return std::get<column_vector<T, Storage>>(m_columns).try_get(id.index);
     }
 
     /// @brief Get a reference to the value of a column for the given row. Throws if not present.
@@ -1136,7 +1262,7 @@ class soa_table {
         if (!is_valid(id)) {
             return std::unexpected(access_error::invalid_row);
         }
-        T* value = std::get<column_vector<T>>(m_columns).try_get(id.index);
+        T* value = std::get<column_vector<T, Storage>>(m_columns).try_get(id.index);
         if (value == nullptr) {
             return std::unexpected(access_error::missing_column);
         }
@@ -1156,7 +1282,7 @@ class soa_table {
         if (!is_valid(id)) {
             return std::unexpected(access_error::invalid_row);
         }
-        const T* value = std::get<column_vector<T>>(m_columns).try_get(id.index);
+        const T* value = std::get<column_vector<T, Storage>>(m_columns).try_get(id.index);
         if (value == nullptr) {
             return std::unexpected(access_error::missing_column);
         }
@@ -1217,7 +1343,7 @@ class soa_table {
                        return m_rows[row_index].alive;
                    }) |
                    std::views::transform([this](std::size_t row_index) {
-                       return get_transform_func<soa_table, ReqColumns...>(this)(
+                       return get_transform_func<basic_soa_table, ReqColumns...>(this)(
                            static_cast<std::uint32_t>(row_index)
                        );
                    });
@@ -1228,7 +1354,7 @@ class soa_table {
             (
                 [&] {
                     if constexpr (!detail::is_optional_v<ReqColumns>) {
-                        auto& pool = std::get<column_vector<ReqColumns>>(m_columns);
+                        auto& pool = std::get<column_vector<ReqColumns, Storage>>(m_columns);
                         if (pool.size() < min_size) {
                             min_size     = pool.size();
                             driver_dense = &pool.dense_rows();
@@ -1245,7 +1371,7 @@ class soa_table {
             };
 
             return *driver_dense | std::views::filter(std::move(filter_func)) |
-                   std::views::transform(get_transform_func<soa_table, ReqColumns...>(this));
+                   std::views::transform(get_transform_func<basic_soa_table, ReqColumns...>(this));
         }
     }
 
@@ -1278,7 +1404,7 @@ class soa_table {
                        return m_rows[row_index].alive;
                    }) |
                    std::views::transform([this](std::size_t row_index) {
-                       return get_transform_func<const soa_table, ReqColumns...>(this)(
+                       return get_transform_func<const basic_soa_table, ReqColumns...>(this)(
                            static_cast<std::uint32_t>(row_index)
                        );
                    });
@@ -1289,7 +1415,7 @@ class soa_table {
             (
                 [&] {
                     if constexpr (!detail::is_optional_v<ReqColumns>) {
-                        auto& pool = std::get<column_vector<ReqColumns>>(m_columns);
+                        auto& pool = std::get<column_vector<ReqColumns, Storage>>(m_columns);
                         if (pool.size() < min_size) {
                             min_size     = pool.size();
                             driver_dense = &pool.dense_rows();
@@ -1306,7 +1432,8 @@ class soa_table {
             };
 
             return *driver_dense | std::views::filter(std::move(filter_func)) |
-                   std::views::transform(get_transform_func<const soa_table, ReqColumns...>(this));
+                   std::views::transform(get_transform_func<const basic_soa_table, ReqColumns...>(this
+                   ));
         }
     }
 
@@ -1358,10 +1485,11 @@ class soa_table {
     /// @note The span covers only rows that currently have the column, in dense storage order; pair
     /// it with row_indices<T>() to recover each value's row. Any operation that adds, removes, or
     /// reorders the column (assign, unassign, erase, sort, clear, reserve) invalidates the span.
+    /// Only available for contiguous (soa_layout) storage; tiled tables use column_tiles<T>().
     template <typename T>
-        requires registered_column_v<T>
+        requires registered_column_v<T> && Storage::is_contiguous
     [[nodiscard]] std::span<T> column() {
-        auto& data = std::get<column_vector<T>>(m_columns).raw_data();
+        auto& data = std::get<column_vector<T, Storage>>(m_columns).raw_data();
         return std::span<T>(data.data(), data.size());
     }
 
@@ -1369,10 +1497,50 @@ class soa_table {
     /// @tparam T The column type.
     /// @return A span over the column's packed const values.
     template <typename T>
-        requires registered_column_v<T>
+        requires registered_column_v<T> && Storage::is_contiguous
     [[nodiscard]] std::span<const T> column() const {
-        const auto& data = std::get<column_vector<T>>(m_columns).raw_data();
+        const auto& data = std::get<column_vector<T, Storage>>(m_columns).raw_data();
         return std::span<const T>(data.data(), data.size());
+    }
+
+    /// @brief View a column as a sequence of contiguous, over-aligned tiles.
+    /// @tparam T The column type.
+    /// @return One span per storage tile (a single whole-column span for soa_layout).
+    /// @note The uniform tiled view across both storage policies: feed each span to a SIMD kernel.
+    /// Invalidated by the same operations as column<T>().
+    template <typename T>
+        requires registered_column_v<T>
+    [[nodiscard]] std::vector<std::span<T>> column_tiles() {
+        auto&                     data = std::get<column_vector<T, Storage>>(m_columns).raw_data();
+        std::vector<std::span<T>> tiles;
+        if constexpr (Storage::is_contiguous) {
+            tiles.emplace_back(data.data(), data.size());
+        } else {
+            tiles.reserve(data.tile_count());
+            for (std::size_t i = 0; i < data.tile_count(); ++i) {
+                tiles.push_back(data.tile(i));
+            }
+        }
+        return tiles;
+    }
+
+    /// @brief Const overload of column_tiles().
+    /// @tparam T The column type.
+    /// @return One const span per storage tile.
+    template <typename T>
+        requires registered_column_v<T>
+    [[nodiscard]] std::vector<std::span<const T>> column_tiles() const {
+        const auto& data = std::get<column_vector<T, Storage>>(m_columns).raw_data();
+        std::vector<std::span<const T>> tiles;
+        if constexpr (Storage::is_contiguous) {
+            tiles.emplace_back(data.data(), data.size());
+        } else {
+            tiles.reserve(data.tile_count());
+            for (std::size_t i = 0; i < data.tile_count(); ++i) {
+                tiles.push_back(data.tile(i));
+            }
+        }
+        return tiles;
     }
 
     /// @brief Row indices parallel to column<T>(), mapping each dense value back to its row.
@@ -1383,7 +1551,7 @@ class soa_table {
     template <typename T>
         requires registered_column_v<T>
     [[nodiscard]] std::span<const std::uint32_t> row_indices() const {
-        const auto& dense = std::get<column_vector<T>>(m_columns).dense_rows();
+        const auto& dense = std::get<column_vector<T, Storage>>(m_columns).dense_rows();
         return std::span<const std::uint32_t>(dense.data(), dense.size());
     }
 
@@ -1437,7 +1605,7 @@ class soa_table {
     template <typename T, typename InputIt>
         requires registered_column_v<T>
     void assign_batch(const std::vector<row_id>& ids, InputIt first) {
-        auto& pool = std::get<column_vector<T>>(m_columns);
+        auto& pool = std::get<column_vector<T, Storage>>(m_columns);
         auto  it   = first;
         for (auto id : ids) {
             if (is_valid(id)) {
@@ -1472,7 +1640,7 @@ class soa_table {
             bool decided =
                 (([&] {
                      using T     = typename std::decay_t<SortCriteria>::first_type;
-                     auto& pool  = std::get<column_vector<T>>(m_columns);
+                     auto& pool  = std::get<column_vector<T, Storage>>(m_columns);
                      bool  has_a = pool.contains(a);
                      bool  has_b = pool.contains(b);
                      if (has_a && has_b) {
@@ -1512,7 +1680,7 @@ class soa_table {
     template <typename T, typename Compare>
         requires registered_column_v<T>
     void sort_by_column(Compare&& comp) {
-        auto&       pool  = std::get<column_vector<T>>(m_columns);
+        auto&       pool  = std::get<column_vector<T, Storage>>(m_columns);
         const auto& dense = pool.dense_rows();
 
         std::vector<std::uint32_t> sorted_rows = dense;
@@ -1559,7 +1727,7 @@ class soa_table {
                 return;
             }
 
-            auto&       pool  = std::get<column_vector<T>>(m_columns);
+            auto&       pool  = std::get<column_vector<T, Storage>>(m_columns);
             const auto& dense = pool.dense_rows();
 
             std::vector<std::uint32_t> sorted_rows = dense;
@@ -1611,6 +1779,21 @@ class soa_table {
         sort_by_column_parallel<T>(std::forward<Compare>(comp));
     }
 };
+
+// ==========================================
+// 4b. Table aliases by storage policy
+// ==========================================
+
+/// @brief The default table: a flat, SIMD-aligned Structure-of-Arrays layout.
+/// @tparam Columns The unique column types.
+template <typename... Columns>
+using soa_table = basic_soa_table<soa_layout, Columns...>;
+
+/// @brief A table whose columns use tiled (AoSoA-style) storage of the given tile size.
+/// @tparam TileSize The number of elements per tile.
+/// @tparam Columns The unique column types.
+template <std::size_t TileSize, typename... Columns>
+using aosoa_table = basic_soa_table<aosoa_layout<TileSize>, Columns...>;
 
 // =====================
 // 5. Row handle helper

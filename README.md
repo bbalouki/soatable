@@ -68,6 +68,7 @@ In our benchmarks, SoaTable's `select` queries are often **5x to 15x faster** th
 - **Zero-Copy Column Spans:** `column<T>()` hands a column's dense values to BLAS / a SIMD kernel / numpy with no copy; `row_indices<T>()` maps them back to handles.
 - **Validity Bitmaps:** `validity<T>()` produces an Arrow-style packed presence bitmap for branchless masked iteration and interchange.
 - **Serialization:** opt-in `<soatable/serialize.hpp>` `save()` / `load()` snapshot trivially-copyable tables to a versioned, schema-checked byte buffer.
+- **Pluggable Storage Layout:** the default `soa_table` is flat and SIMD-aligned; `aosoa_table<TileSize, ...>` opts into tiled (AoSoA-style) storage with bounded reallocation, and `column_tiles<T>()` views either as per-tile aligned spans.
 
 ### Naming
 
