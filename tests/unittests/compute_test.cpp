@@ -1,5 +1,7 @@
-// B.1 vectorized column ops: single-column span ufuncs, table column helpers across SoA and AoSoA
-// storage, and cross-column row-wise assign_from.
+/// @file compute_test.cpp
+/// @brief B.1 vectorized column ops: single-column span ufuncs, table column helpers across SoA and
+/// AoSoA storage, and cross-column row-wise assign_from.
+/// @author Bertin Balouki SIMYELI
 
 #include <gtest/gtest.h>
 

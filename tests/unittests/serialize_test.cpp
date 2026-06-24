@@ -1,5 +1,9 @@
-// A.4 serialization: round-trip a table through save()/load(), and reject corrupt or mismatched
-// buffers. Uses trivially-copyable columns, which the fast path requires.
+/// @file serialize_test.cpp
+/// @brief A.4 serialization: round-trip a table through save()/load(), and reject corrupt or
+/// mismatched buffers.
+/// @author Bertin Balouki SIMYELI
+///
+/// Uses trivially-copyable columns, which the fast path requires.
 
 #include <gtest/gtest.h>
 

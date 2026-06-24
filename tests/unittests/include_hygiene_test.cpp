@@ -1,5 +1,7 @@
-// Verifies header hygiene: the header is safe to include in multiple translation units (no
-// non-inline definitions causing ODR/link errors) and the opt-in sstd alias works when requested.
+/// @file include_hygiene_test.cpp
+/// @brief Verifies header hygiene: the header is safe to include in multiple translation units (no
+/// non-inline definitions causing ODR/link errors) and the opt-in sstd alias works when requested.
+/// @author Bertin Balouki SIMYELI
 
 #define SOATABLE_ENABLE_SSTD_ALIAS
 #include "soatable/soatable.hpp"

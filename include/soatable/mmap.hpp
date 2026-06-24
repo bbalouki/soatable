@@ -1,13 +1,17 @@
+/// @file mmap.hpp
+/// @brief Opt-in memory-mapped column storage for very large, trivially-copyable columns.
+/// @author Bertin Balouki SIMYELI
+///
+/// mmap_allocator serves column storage from page-granular virtual memory (mmap on POSIX,
+/// VirtualAlloc on Windows) that the OS pages in on demand, so a column can be far larger than the
+/// resident set and only the touched pages occupy physical RAM. Mappings are page-aligned, so
+/// columns stay SIMD-friendly.
+///
+/// Composes with the C.2 allocator support as mmap_soa_table. Reserve the column capacity up front
+/// (table.reserve) so the backing region is mapped once; growth otherwise remaps and copies.
+/// Backing is anonymous demand-paged virtual memory; persistent named-file mapping is a future
+/// extension.
 #pragma once
-
-// Opt-in memory-mapped column storage for very large, trivially-copyable columns. mmap_allocator
-// serves column storage from page-granular virtual memory (mmap on POSIX, VirtualAlloc on Windows)
-// that the OS pages in on demand, so a column can be far larger than the resident set and only the
-// touched pages occupy physical RAM. Mappings are page-aligned, so columns stay SIMD-friendly.
-//
-// Composes with the C.2 allocator support as mmap_soa_table. Reserve the column capacity up front
-// (table.reserve) so the backing region is mapped once; growth otherwise remaps and copies. Backing
-// is anonymous demand-paged virtual memory; persistent named-file mapping is a future extension.
 
 #include <cstddef>
 #include <limits>

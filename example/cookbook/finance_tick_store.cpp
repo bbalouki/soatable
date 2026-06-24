@@ -1,5 +1,9 @@
-// Finance cookbook: a tick store. Ingest trades, derive P&L per row with a cross-column op, and
-// aggregate notional volume per symbol with the query helpers.
+/// @file finance_tick_store.cpp
+/// @brief Finance cookbook: a tick store.
+/// @author Bertin Balouki SIMYELI
+///
+/// Ingest trades, derive P&L per row with a cross-column op, and aggregate notional volume per
+/// symbol with the query helpers.
 
 #include <cstdint>
 #include <string>

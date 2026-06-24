@@ -1,6 +1,10 @@
-// D.3 memory-mapped columns: mmap_soa_table backs column storage with demand-paged virtual memory.
-// Verifies a large column round-trips, the mapping is page-aligned (SIMD-friendly), and the normal
-// table API (sort/erase) works over it.
+/// @file mmap_test.cpp
+/// @brief D.3 memory-mapped columns: mmap_soa_table backs column storage with demand-paged virtual
+/// memory.
+/// @author Bertin Balouki SIMYELI
+///
+/// Verifies a large column round-trips, the mapping is page-aligned (SIMD-friendly), and the normal
+/// table API (sort/erase) works over it.
 
 #include <gtest/gtest.h>
 

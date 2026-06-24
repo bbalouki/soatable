@@ -1,5 +1,9 @@
-// Sorting: single-column, the sort_by alias, multi-column tie-breaking, and the parallel variant.
-// Each asserts that physical reordering keeps every row_id valid and every value retrievable.
+/// @file sort_test.cpp
+/// @brief Sorting: single-column, the sort_by alias, multi-column tie-breaking, and the parallel
+/// variant.
+/// @author Bertin Balouki SIMYELI
+///
+/// Each asserts that physical reordering keeps every row_id valid and every value retrievable.
 
 #include <gtest/gtest.h>
 

@@ -1,5 +1,7 @@
-// select<>() projections: required-only, mixed optional, zero-required (all-optional) driver,
-// all-absent driver column, and the rows()/for_each_row iteration helpers.
+/// @file select_test.cpp
+/// @brief select<>() projections: required-only, mixed optional, zero-required (all-optional)
+/// driver, all-absent driver column, and the rows()/for_each_row iteration helpers.
+/// @author Bertin Balouki SIMYELI
 
 #include <gtest/gtest.h>
 

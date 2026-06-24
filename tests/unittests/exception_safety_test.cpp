@@ -1,5 +1,7 @@
-// Exercises the documented exception-safety guarantees with a move-only column type and a column
-// whose constructor throws on a chosen insertion.
+/// @file exception_safety_test.cpp
+/// @brief Exercises the documented exception-safety guarantees with a move-only column type and a
+/// column whose constructor throws on a chosen insertion.
+/// @author Bertin Balouki SIMYELI
 
 #include <gtest/gtest.h>
 

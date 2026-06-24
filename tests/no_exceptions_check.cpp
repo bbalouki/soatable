@@ -1,6 +1,9 @@
-// Built with SOATABLE_NO_EXCEPTIONS (and -fno-exceptions on GCC/Clang) to prove the freestanding
-// no-exceptions path compiles and that the non-throwing accessors behave correctly. Returns 0 on
-// success; a non-zero exit code identifies the failing check.
+/// @file no_exceptions_check.cpp
+/// @brief Built with SOATABLE_NO_EXCEPTIONS (and -fno-exceptions on GCC/Clang) to prove the
+/// freestanding no-exceptions path compiles and that the non-throwing accessors behave correctly.
+/// @author Bertin Balouki SIMYELI
+///
+/// Returns 0 on success; a non-zero exit code identifies the failing check.
 
 #include "soatable/soatable.hpp"
 

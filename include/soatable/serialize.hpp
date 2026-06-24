@@ -1,14 +1,18 @@
+/// @file serialize.hpp
+/// @brief Opt-in binary serialization for soa_table.
+/// @author Bertin Balouki SIMYELI
+///
+/// Included separately so the core header pays nothing for it. Supports the trivially-copyable fast
+/// path: each column's dense values are dumped/loaded as raw bytes, wrapped in a versioned,
+/// schema-checked header that round-trips the full table state (handles, generations, free list,
+/// and physical column order).
+///
+/// Portability: the format is self-describing and versioned, but values are written in the host's
+/// native byte order and ABI. It is intended for snapshots consumed by the same architecture (tick
+/// stores, simulation checkpoints). Cross-endian / cross-ABI interchange is a future enhancement
+/// and is the natural place for an Arrow bridge, built on column<T>() spans and
+/// validity<T>().words().
 #pragma once
-
-// Opt-in binary serialization for soa_table. Included separately so the core header pays nothing
-// for it. Supports the trivially-copyable fast path: each column's dense values are dumped/loaded
-// as raw bytes, wrapped in a versioned, schema-checked header that round-trips the full table state
-// (handles, generations, free list, and physical column order).
-//
-// Portability: the format is self-describing and versioned, but values are written in the host's
-// native byte order and ABI. It is intended for snapshots consumed by the same architecture (tick
-// stores, simulation checkpoints). Cross-endian / cross-ABI interchange is a future enhancement and
-// is the natural place for an Arrow bridge, built on column<T>() spans and validity<T>().words().
 
 #include <array>
 #include <cstddef>

@@ -1,8 +1,11 @@
+/// @file query.hpp
+/// @brief Opt-in query helpers layered on select<>() / view<>(): predicate filtering and group-by
+/// aggregation.
+/// @author Bertin Balouki SIMYELI
+///
+/// These compose the existing smallest-driver scan with a predicate or a grouping pass, giving
+/// analytics ergonomics without leaving C++.
 #pragma once
-
-// Opt-in query helpers layered on select<>() / view<>(): predicate filtering and group-by
-// aggregation. These compose the existing smallest-driver scan with a predicate or a grouping pass,
-// giving analytics ergonomics without leaving C++.
 
 #include <cstddef>
 #include <functional>

@@ -1,11 +1,14 @@
+/// @file compute.hpp
+/// @brief Opt-in vectorized column operations ("the numpy part") layered on the zero-copy column
+/// spans from soatable.hpp.
+/// @author Bertin Balouki SIMYELI
+///
+/// Single-column ufuncs operate on std::span and rely on compiler auto-vectorization over the
+/// 64-byte-aligned column storage; table-level helpers apply them through column_tiles<T>(), so
+/// they work uniformly for the contiguous (SoA) and tiled (AoSoA) storage policies. Cross-column
+/// (row-wise) computation goes through the select/view join, since independent sparse columns are
+/// not row-aligned in storage.
 #pragma once
-
-// Opt-in vectorized column operations ("the numpy part") layered on the zero-copy column spans from
-// soatable.hpp. Single-column ufuncs operate on std::span and rely on compiler auto-vectorization
-// over the 64-byte-aligned column storage; table-level helpers apply them through column_tiles<T>(),
-// so they work uniformly for the contiguous (SoA) and tiled (AoSoA) storage policies. Cross-column
-// (row-wise) computation goes through the select/view join, since independent sparse columns are not
-// row-aligned in storage.
 
 #include <algorithm>
 #include <concepts>

@@ -1,3 +1,14 @@
+/// @file soatable.hpp
+/// @brief Core header for SoaTable: a header-only C++23 sparse Structure-of-Arrays table.
+/// @author Bertin Balouki SIMYELI
+///
+/// Defines the foundational types: generational `row_id` handles, the sparse-to-dense
+/// `column_vector` backing each column, the `basic_soa_table` container (aliased as `soa_table`,
+/// `aosoa_table`, `chunked_soa_table`, `custom_soa_table`) with its `select`/`view` joins,
+/// zero-copy `column<T>()` spans, validity `bitmap`s, and the `quantized_float` / `packed_bits` /
+/// `delta_value` / `dirty_mask` helpers. The compute, query, serialization, allocator, concurrency,
+/// out-of-core, time-series, units, reflection, and dynamic-schema add-ons live in their own opt-in
+/// headers and build on this one.
 #pragma once
 
 #include <algorithm>
@@ -146,11 +157,13 @@ struct index_of<T, std::tuple<Types...>> {
 
 /// @brief Default over-alignment (in bytes) for dense column storage.
 ///
-/// Columns are over-aligned to this boundary (matching Apache Arrow's 64-byte recommendation) so the
-/// spans returned by soa_table::column<T>() are ready for aligned SIMD loads and cache-line friendly.
+/// Columns are over-aligned to this boundary (matching Apache Arrow's 64-byte recommendation) so
+/// the spans returned by soa_table::column<T>() are ready for aligned SIMD loads and cache-line
+/// friendly.
 inline constexpr std::size_t simd_alignment = 64;
 
-/// @brief The alignment used for a column of T: the larger of T's natural alignment and simd_alignment.
+/// @brief The alignment used for a column of T: the larger of T's natural alignment and
+/// simd_alignment.
 /// @tparam T The column value type.
 template <typename T>
 inline constexpr std::size_t column_alignment =
@@ -222,8 +235,9 @@ struct aligned_allocator {
 template <typename T>
 using aligned_vector = std::vector<T, aligned_allocator<T>>;
 
-/// @brief A tiled (AoSoA-style) dense container: a sequence of fixed-size, individually over-aligned
-/// tiles. Growth appends a tile and never copies existing tiles, bounding reallocation cost.
+/// @brief A tiled (AoSoA-style) dense container: a sequence of fixed-size, individually
+/// over-aligned tiles. Growth appends a tile and never copies existing tiles, bounding reallocation
+/// cost.
 /// @tparam T The element type.
 /// @tparam TileSize The number of elements per tile.
 ///
@@ -278,9 +292,7 @@ class tiled_vector {
     }
 
     /// @brief Reserve capacity for at least the given number of elements (rounded up to tiles).
-    void reserve(std::size_t capacity) {
-        m_tiles.reserve((capacity + TileSize - 1) / TileSize);
-    }
+    void reserve(std::size_t capacity) { m_tiles.reserve((capacity + TileSize - 1) / TileSize); }
 
     /// @brief Remove all elements.
     void clear() noexcept {
@@ -401,7 +413,8 @@ struct soa_layout_with {
 };
 
 namespace detail {
-/// @brief The default column allocator: over-aligned to column_alignment<T> for SIMD-friendly spans.
+/// @brief The default column allocator: over-aligned to column_alignment<T> for SIMD-friendly
+/// spans.
 template <typename T>
 using default_column_allocator = aligned_allocator<T>;
 }  // namespace detail
@@ -1118,9 +1131,7 @@ class basic_soa_table {
             m_rows[index].signature.reset();
         } else {
             if (!can_address_rows(m_rows.size() + 1)) {
-                SOATABLE_THROW(
-                    std::overflow_error, "soa_table exhausted the row_id index space."
-                );
+                SOATABLE_THROW(std::overflow_error, "soa_table exhausted the row_id index space.");
             }
             m_rows.reserve(m_rows.size() + 1);
             m_free_links.reserve(m_free_links.size() + 1);
@@ -1472,8 +1483,9 @@ class basic_soa_table {
             };
 
             return *driver_dense | std::views::filter(std::move(filter_func)) |
-                   std::views::transform(get_transform_func<const basic_soa_table, ReqColumns...>(this
-                   ));
+                   std::views::transform(
+                       get_transform_func<const basic_soa_table, ReqColumns...>(this)
+                   );
         }
     }
 

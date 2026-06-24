@@ -1,8 +1,11 @@
+/// @file timeseries.hpp
+/// @brief Opt-in time-series helpers: rolling-window aggregates and successive deltas over a
+/// column's values, plus dirty-region scans for incremental recompute.
+/// @author Bertin Balouki SIMYELI
+///
+/// The rolling/delta helpers operate on a column's dense order, which is meaningful once the table
+/// is sorted by its time key, so sort first.
 #pragma once
-
-// Opt-in time-series helpers: rolling-window aggregates and successive deltas over a column's
-// values, plus dirty-region scans for incremental recompute. The rolling/delta helpers operate on a
-// column's dense order, which is meaningful once the table is sorted by its time key, so sort first.
 
 #include <algorithm>
 #include <cstddef>

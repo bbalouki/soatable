@@ -1,9 +1,12 @@
+/// @file pmr.hpp
+/// @brief Opt-in std::pmr (polymorphic memory resource) support for SoaTable.
+/// @author Bertin Balouki SIMYELI
+///
+/// Included separately so the core header does not pull in <memory_resource>. A pmr_soa_table
+/// allocates its column storage from the active std::pmr default memory resource, letting callers
+/// route allocations to an arena, monotonic buffer, or pool resource for deterministic,
+/// fragmentation-free behaviour.
 #pragma once
-
-// Opt-in std::pmr (polymorphic memory resource) support for SoaTable. Included separately so the
-// core header does not pull in <memory_resource>. A pmr_soa_table allocates its column storage from
-// the active std::pmr default memory resource, letting callers route allocations to an arena,
-// monotonic buffer, or pool resource for deterministic, fragmentation-free behaviour.
 
 #include <memory_resource>
 

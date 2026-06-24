@@ -1,5 +1,7 @@
-// Core table lifecycle: insert/erase/assign/get/contains/unassign, handle validity, free-list
-// recycling under churn, ABA generation behaviour, and empty/large tables.
+/// @file table_test.cpp
+/// @brief Core table lifecycle: insert/erase/assign/get/contains/unassign, handle validity,
+/// free-list recycling under churn, ABA generation behaviour, and empty/large tables.
+/// @author Bertin Balouki SIMYELI
 
 #include <gtest/gtest.h>
 

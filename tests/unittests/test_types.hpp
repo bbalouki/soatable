@@ -1,8 +1,10 @@
+/// @file test_types.hpp
+/// @brief Shared column types and fixtures used across the soa_table unit tests.
+/// @author Bertin Balouki SIMYELI
+///
+/// Kept header-only so each translation unit compiles them directly; the throwing type's budget is
+/// per-process state reset by the tests that use it.
 #pragma once
-
-// Shared column types and fixtures used across the soa_table unit tests. Kept header-only so each
-// translation unit compiles them directly; the throwing type's budget is per-process state reset by
-// the tests that use it.
 
 #include <stdexcept>
 #include <string>

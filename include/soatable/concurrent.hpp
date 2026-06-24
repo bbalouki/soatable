@@ -1,13 +1,16 @@
+/// @file concurrent.hpp
+/// @brief Opt-in thread-safe access to a table.
+/// @author Bertin Balouki SIMYELI
+///
+/// synchronized_table wraps any soa_table behind a std::shared_mutex, giving many concurrent
+/// readers and exclusive writers via scoped callbacks: the lock is held for the duration of the
+/// callback, so access is always synchronized. This matches the "many strategy threads read while
+/// one thread ingests" use case.
+///
+/// It is reader-writer synchronization, not lock-free MVCC or sharding; a snapshot/copy-on-write
+/// read view and per-shard locking are natural future enhancements. References handed to a callback
+/// must not escape it, since they are only valid while the lock is held.
 #pragma once
-
-// Opt-in thread-safe access to a table. synchronized_table wraps any soa_table behind a
-// std::shared_mutex, giving many concurrent readers and exclusive writers via scoped callbacks: the
-// lock is held for the duration of the callback, so access is always synchronized. This matches the
-// "many strategy threads read while one thread ingests" use case.
-//
-// It is reader-writer synchronization, not lock-free MVCC or sharding; a snapshot/copy-on-write read
-// view and per-shard locking are natural future enhancements. References handed to a callback must
-// not escape it, since they are only valid while the lock is held.
 
 #include <shared_mutex>
 #include <utility>

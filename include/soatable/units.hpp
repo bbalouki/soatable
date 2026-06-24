@@ -1,10 +1,12 @@
+/// @file units.hpp
+/// @brief Opt-in compile-time dimensional analysis for engineering columns.
+/// @author Bertin Balouki SIMYELI
+///
+/// A quantity<T, Dimension> carries its units in the type: adding or subtracting requires matching
+/// dimensions (a mismatch is a compile error), while multiplication and division combine
+/// dimensions. Use a quantity as a column type to get dimensional safety at table operation
+/// boundaries (e.g. you cannot add metres to seconds).
 #pragma once
-
-// Opt-in compile-time dimensional analysis for engineering columns. A quantity<T, Dimension>
-// carries its units in the type: adding or subtracting requires matching dimensions (a mismatch is
-// a compile error), while multiplication and division combine dimensions. Use a quantity as a
-// column type to get dimensional safety at table operation boundaries (e.g. you cannot add metres
-// to seconds).
 
 #include <type_traits>
 

@@ -1,6 +1,9 @@
-// D.1 concurrent table: synchronized_table serializes writers against readers. Many reader threads
-// run concurrently with a single ingesting writer; the final state must be consistent and no read
-// may observe a corrupt size.
+/// @file concurrent_test.cpp
+/// @brief D.1 concurrent table: synchronized_table serializes writers against readers.
+/// @author Bertin Balouki SIMYELI
+///
+/// Many reader threads run concurrently with a single ingesting writer; the final state must be
+/// consistent and no read may observe a corrupt size.
 
 #include <gtest/gtest.h>
 

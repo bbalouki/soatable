@@ -1,4 +1,6 @@
-// Batch insertion and single-column batch assignment, including the skip-invalid-rows path.
+/// @file batch_test.cpp
+/// @brief Batch insertion and single-column batch assignment, including the skip-invalid-rows path.
+/// @author Bertin Balouki SIMYELI
 
 #include <gtest/gtest.h>
 

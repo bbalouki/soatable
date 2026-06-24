@@ -1,4 +1,7 @@
-// Must fail to compile: adding quantities of different dimensions is a dimensional-safety error.
+/// @file dimension_mismatch.cpp
+/// @brief Must fail to compile: adding quantities of different dimensions is a dimensional-safety
+/// error.
+/// @author Bertin Balouki SIMYELI
 
 #include "soatable/units.hpp"
 

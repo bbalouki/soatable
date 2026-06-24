@@ -1,6 +1,9 @@
-// Aerospace cookbook: a telemetry frame store. Track smoothly-varying altitude with delta_value,
-// flag changed subsystems per frame with dirty_mask, and report which frames carry a temperature
-// reading via the validity bitmap.
+/// @file aerospace_telemetry.cpp
+/// @brief Aerospace cookbook: a telemetry frame store.
+/// @author Bertin Balouki SIMYELI
+///
+/// Track smoothly-varying altitude with delta_value, flag changed subsystems per frame with
+/// dirty_mask, and report which frames carry a temperature reading via the validity bitmap.
 
 #include <cstdint>
 

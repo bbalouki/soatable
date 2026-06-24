@@ -1,5 +1,7 @@
-// C.4 reflection path: the portable fallback (columns_of specialization -> table_for) works today
-// and resolves to the same type as the explicit type-list API.
+/// @file reflect_test.cpp
+/// @brief C.4 reflection path: the portable fallback (columns_of specialization -> table_for) works
+/// today and resolves to the same type as the explicit type-list API.
+/// @author Bertin Balouki SIMYELI
 
 #include <gtest/gtest.h>
 

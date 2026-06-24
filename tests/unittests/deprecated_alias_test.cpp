@@ -1,6 +1,10 @@
-// Verifies the deprecated PascalCase aliases (Phase 2.4 migration window) still resolve to the
-// new snake_case types. The deprecation diagnostic is intentionally silenced for this TU, since
-// exercising the deprecated path is the whole point of the test.
+/// @file deprecated_alias_test.cpp
+/// @brief Verifies the deprecated PascalCase aliases (Phase 2.4 migration window) still resolve to
+/// the new snake_case types.
+/// @author Bertin Balouki SIMYELI
+///
+/// The deprecation diagnostic is intentionally silenced for this TU, since exercising the
+/// deprecated path is the whole point of the test.
 
 #if defined(_MSC_VER)
 #pragma warning(push)

@@ -1,5 +1,9 @@
-// Round-trip and bound coverage for the standalone helpers: quantized_float, packed_bits,
-// delta_value, and dirty_mask. Sweeps use deterministic value ranges (no randomness).
+/// @file compression_test.cpp
+/// @brief Round-trip and bound coverage for the standalone helpers: quantized_float, packed_bits,
+/// delta_value, and dirty_mask.
+/// @author Bertin Balouki SIMYELI
+///
+/// Sweeps use deterministic value ranges (no randomness).
 
 #include <gtest/gtest.h>
 

@@ -1,5 +1,8 @@
-// A.1 zero-copy column spans: column<T>() exposes dense values contiguously, row_indices<T>() maps
-// them back to rows, and mutations through the span are visible in the table.
+/// @file span_test.cpp
+/// @brief A.1 zero-copy column spans: column<T>() exposes dense values contiguously,
+/// row_indices<T>() maps them back to rows, and mutations through the span are visible in the
+/// table.
+/// @author Bertin Balouki SIMYELI
 
 #include <gtest/gtest.h>
 

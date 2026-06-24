@@ -1,5 +1,7 @@
-// Must fail to compile: accessing a column type that is not part of the table's schema violates the
-// registered_column_v constraint.
+/// @file unregistered_column.cpp
+/// @brief Must fail to compile: accessing a column type that is not part of the table's schema
+/// violates the registered_column_v constraint.
+/// @author Bertin Balouki SIMYELI
 
 #include "soatable/soatable.hpp"
 

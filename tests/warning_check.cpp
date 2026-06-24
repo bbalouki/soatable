@@ -1,5 +1,8 @@
-// Compiles the public header under the project's strict warning set (no GoogleTest headers in the
-// translation unit) so that -Wconversion / -Wsign-conversion regressions surface as build failures.
+/// @file warning_check.cpp
+/// @brief Compiles the public header under the project's strict warning set (no GoogleTest headers
+/// in the translation unit) so that -Wconversion / -Wsign-conversion regressions surface as build
+/// failures.
+/// @author Bertin Balouki SIMYELI
 
 #include "soatable/soatable.hpp"
 

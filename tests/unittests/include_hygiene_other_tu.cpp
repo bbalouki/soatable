@@ -1,5 +1,9 @@
-// Second translation unit that also includes the header. If the header carried any non-inline
-// definition, linking this TU together with include_hygiene_test.cpp would fail.
+/// @file include_hygiene_other_tu.cpp
+/// @brief Second translation unit that also includes the header.
+/// @author Bertin Balouki SIMYELI
+///
+/// If the header carried any non-inline definition, linking this TU together with
+/// include_hygiene_test.cpp would fail.
 
 #include <cstddef>
 

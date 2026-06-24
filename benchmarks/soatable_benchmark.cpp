@@ -1,6 +1,10 @@
-// SoaTable benchmark suite. Covers the axes where regressions hide: insertion, erase-churn,
-// single-column and parallel sort, sparse selection across density sweeps, and the select driver
-// heuristic. Baselines compare against an Array-of-Structures scan and a hand-rolled columnar scan.
+/// @file soatable_benchmark.cpp
+/// @brief SoaTable benchmark suite.
+/// @author Bertin Balouki SIMYELI
+///
+/// Covers the axes where regressions hide: insertion, erase-churn, single-column and parallel sort,
+/// sparse selection across density sweeps, and the select driver heuristic. Baselines compare
+/// against an Array-of-Structures scan and a hand-rolled columnar scan.
 
 #include <benchmark/benchmark.h>
 
@@ -8,6 +12,7 @@
 #include <random>
 #include <vector>
 
+#include "soatable/compute.hpp"
 #include "soatable/soatable.hpp"
 
 namespace {
@@ -298,5 +303,80 @@ static void BM_HandRolledSoAScan(benchmark::State& state) {
     }
 }
 BENCHMARK(BM_HandRolledSoAScan)->Arg(100'000)->Arg(250'000);
+
+// --- SoA vs AoSoA (tiled) selection -----------------------------------------------------------
+// A dense 2-column select, contiguous storage vs 1024-element tiles, to show the layout cost of a
+// full-column scan is comparable while tiled storage bounds reallocation on growth.
+static void BM_SelectSoaDense(benchmark::State& state) {
+    const std::size_t                    row_count = static_cast<std::size_t>(state.range(0));
+    soatable::soa_table<Temperature, Pressure> table;
+    table.reserve(row_count);
+    for (std::size_t i = 0; i < row_count; ++i) {
+        const auto row = table.insert();
+        table.assign<Temperature>(row, Temperature {temperature_value(i)});
+        table.assign<Pressure>(row, Pressure {pressure_value(i)});
+    }
+    for (auto _ : state) {
+        double sum = 0.0;
+        for (auto [id, temperature, pressure] : table.select<Temperature, Pressure>()) {
+            sum += temperature.get().celsius + pressure.get().kpa;
+        }
+        benchmark::DoNotOptimize(sum);
+    }
+}
+BENCHMARK(BM_SelectSoaDense)->Arg(250'000);
+
+static void BM_SelectAosoaDense(benchmark::State& state) {
+    const std::size_t                              row_count = static_cast<std::size_t>(state.range(0));
+    soatable::aosoa_table<1024, Temperature, Pressure> table;
+    for (std::size_t i = 0; i < row_count; ++i) {
+        const auto row = table.insert();
+        table.assign<Temperature>(row, Temperature {temperature_value(i)});
+        table.assign<Pressure>(row, Pressure {pressure_value(i)});
+    }
+    for (auto _ : state) {
+        double sum = 0.0;
+        for (auto [id, temperature, pressure] : table.select<Temperature, Pressure>()) {
+            sum += temperature.get().celsius + pressure.get().kpa;
+        }
+        benchmark::DoNotOptimize(sum);
+    }
+}
+BENCHMARK(BM_SelectAosoaDense)->Arg(250'000);
+
+// --- Compute throughput -----------------------------------------------------------------------
+static void BM_ComputeTransformColumn(benchmark::State& state) {
+    const std::size_t                    row_count = static_cast<std::size_t>(state.range(0));
+    soatable::soa_table<Temperature>     table;
+    table.reserve(row_count);
+    for (std::size_t i = 0; i < row_count; ++i) {
+        table.assign<Temperature>(table.insert(), Temperature {temperature_value(i)});
+    }
+    for (auto _ : state) {
+        soatable::compute::transform_column<Temperature>(
+            table, [](Temperature t) { return Temperature {t.celsius + 1.0}; }
+        );
+        benchmark::ClobberMemory();
+    }
+    state.SetItemsProcessed(state.iterations() * state.range(0));
+}
+BENCHMARK(BM_ComputeTransformColumn)->Arg(250'000);
+
+static void BM_ComputeReduceColumn(benchmark::State& state) {
+    const std::size_t                row_count = static_cast<std::size_t>(state.range(0));
+    soatable::soa_table<Temperature> table;
+    table.reserve(row_count);
+    for (std::size_t i = 0; i < row_count; ++i) {
+        table.assign<Temperature>(table.insert(), Temperature {temperature_value(i)});
+    }
+    for (auto _ : state) {
+        const double total = soatable::compute::reduce_column<Temperature>(
+            table, 0.0, [](double acc, const Temperature& t) { return acc + t.celsius; }
+        );
+        benchmark::DoNotOptimize(total);
+    }
+    state.SetItemsProcessed(state.iterations() * state.range(0));
+}
+BENCHMARK(BM_ComputeReduceColumn)->Arg(250'000);
 
 BENCHMARK_MAIN();

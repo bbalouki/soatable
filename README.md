@@ -5,281 +5,389 @@
 ![CMake](https://img.shields.io/badge/CMake-3.25%2B-green.svg)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Header-only](https://img.shields.io/badge/Header--only-Yes-blue)
-![Dependencies](https://img.shields.io/badge/Dependencies-None-brightgreen)
-![Namespace](https://img.shields.io/badge/Namespace-soatable-lightgrey)
-![Performance](https://img.shields.io/badge/Speedup-5x--15x-orange)
+![Dependencies](https://img.shields.io/badge/Core%20dependencies-None-brightgreen)
 
-SoaTable is a high-performance, header-only C++23 library providing a sparse column-oriented data structure. It is designed for workloads where data is naturally row-addressed but frequently queried by a subset of fields, offering significant performance gains through cache-friendly memory layout and efficient joins.
+**SoaTable is a header-only C++23 Structure-of-Arrays (SoA) table** for data that is row-addressed but
+queried by a subset of fields. It stores each column densely and independently, hands rows stable
+generational handles, and drives joins off the smallest column, so sparse, column-oriented workloads
+get cache-friendly memory and fast queries without giving up a row-oriented API.
+
+The core is a single header with **no dependencies**. Everything beyond the container — compute,
+queries, serialization, allocators, concurrency, out-of-core storage, time-series, units, and runtime
+schemas — lives in **opt-in headers you include only if you use them**.
 
 ## Table of Contents
 
-- [Core Concepts](#core-concepts)
-- [Why Use SoaTable?](#why-use-soatable)
-- [Features](#features)
-- [Quick Start](#quick-start)
-- [Real-World Example](#real-world-example)
+- [The idea in 30 seconds](#the-idea-in-30-seconds)
+- [When SoaTable is the right tool](#when-soatable-is-the-right-tool)
+- [Quick start](#quick-start)
+- [Feature tour (what / why / how)](#feature-tour-what--why--how)
+  - [1. The container: sparse columns + stable handles](#1-the-container-sparse-columns--stable-handles)
+  - [2. Querying: select, view, and structured bindings](#2-querying-select-view-and-structured-bindings)
+  - [3. Accessing values safely](#3-accessing-values-safely)
+  - [4. Sorting and batch loading](#4-sorting-and-batch-loading)
+  - [5. Zero-copy spans, validity bitmaps, serialization](#5-zero-copy-spans-validity-bitmaps-serialization)
+  - [6. The compute layer (the "numpy part")](#6-the-compute-layer-the-numpy-part)
+  - [7. Queries and aggregation](#7-queries-and-aggregation)
+  - [8. Storage policies and allocators](#8-storage-policies-and-allocators)
+  - [9. Concurrency](#9-concurrency)
+  - [10. Domain helpers: compression, time-series, units, dynamic schema](#10-domain-helpers-compression-time-series-units-dynamic-schema)
+  - [11. Portability: freestanding and reflection](#11-portability-freestanding-and-reflection)
+- [The opt-in headers at a glance](#the-opt-in-headers-at-a-glance)
+- [Domain cookbooks](#domain-cookbooks)
 - [Installation](#installation)
 - [Benchmarks](#benchmarks)
+- [Building, testing, docs](#building-testing-docs)
+- [Versioning and naming](#versioning-and-naming)
 - [License](#license)
 
-## Core Concepts
+## The idea in 30 seconds
 
-SoaTable combines three powerful ideas:
-
-- **Stable Generational Row Handles:** Use `row_id` to refer to rows without worrying about the ABA problem or pointer invalidation.
-- **Sparse Column Storage:** Only pay for the columns a row actually has. Memory is managed densely per column while appearing sparse per row.
-- **Efficient Joins:** The `select<...>()` mechanism automatically uses the smallest requested column as a "driver," minimizing iteration overhead during sparse joins.
-
-## Why Use SoaTable?
-
-Most applications start with an **Array of Structures (AoS)** layout:
+Most programs start with an **Array of Structures (AoS)**:
 
 ```cpp
-struct Particle {
-    double x, y, vx, vy;
-    std::string name;
-};
+struct Particle { double x, y, vx, vy; std::string name; };
 std::vector<Particle> particles;
 ```
 
-While simple, AoS becomes inefficient when:
+That is great until your access pattern stops matching your layout. AoS hurts when:
 
-1. **Workloads touch only a few fields:** Scanning the whole array pulls unrelated members into cache lines.
-2. **Schema is sparse:** Many rows have optional fields, leading to wasted memory or complex pointer-heavy structures.
-3. **Identity stability is required:** Deleting elements from a vector invalidates indices or requires expensive shifting.
+- **You touch only a few fields at a time.** Iterating `vx`/`vy` still pulls `name` into every cache
+  line.
+- **Rows are sparse.** Many rows lack many fields, so you waste memory or reach for pointers and
+  `std::optional` everywhere.
+- **Identity must be stable.** Erasing from a vector invalidates indices or forces shifting.
 
-**SoaTable** solves these by storing data in a **Structure of Arrays (SoA)** format internally, while providing a row-oriented abstraction for insertion and handles.
+SoaTable stores a **Structure of Arrays** under the hood — each column is its own dense array — but
+keeps a row-oriented API for insertion and handles. Columns are **independent and sparse**: a column
+only stores the rows that actually have it, so you pay only for what each row uses. Queries iterate the
+**smallest** requested column and check the rest, which is where the speed comes from.
 
-### Performance Benefits
+## When SoaTable is the right tool
 
-In our benchmarks, SoaTable's `select` queries are often **5x to 15x faster** than traditional AoS branch-and-scan methods for sparse data. By focusing iteration on the most selective column, SoaTable avoids checking every single row for presence.
+**Reach for it when:**
 
-## Features
+- **Entity-Component-System / game worlds** — entities with sparse components, stable handles across
+  frames, and systems that iterate a few components at a time.
+- **Finance** — tick and portfolio tables, columnar analytics, group-by aggregation, compact storage,
+  and fast snapshots.
+- **Engineering / aerospace telemetry** — frame stores with optional channels, smoothly varying signals
+  (`delta_value`), dirty-region recompute, dimensional safety, and a no-exceptions build for flight
+  software.
+- **Scientific / data workloads** — hand a column straight to a SIMD kernel or BLAS through a zero-copy
+  span, run vectorized ufuncs, or memory-map columns that exceed RAM.
 
-- **C++23 Standard:** Leverages modern features like `std::views`, `std::print`, and advanced template metaprogramming.
-- **Stable IDs:** `row_id` handles remain valid until the row is explicitly erased, even if other rows are added or reordered.
-- **Sparse Projection:** `select<T, std::optional<U>>()` allows joining required and optional columns seamlessly.
-- **Batch Operations:** `insert_batch` and `assign_batch` for high-throughput data loading.
-- **Parallel Sorting:** Physically reorder columns in parallel based on a comparison criteria.
-- **Multi-Column Sorting:** Sort by primary, secondary, etc., keys.
-- **Data Compression Utilities:** Includes `quantized_float`, `packed_bits`, and `delta_value` for compact storage.
-- **Reference-Semantic Row Views:** `view<A, B>()` yields `row_view` proxies so structured bindings give real references (`for (auto [id, a, b] : table.view<A, B>()) a.x += b.y;`) without `.get()`.
-- **Non-Throwing Accessors:** `get_expected<T>()` returns `std::expected<std::reference_wrapper<T>, access_error>` for hot paths and no-exceptions builds, alongside throwing `get<T>()` and nullable `try_get<T>()`.
-- **Zero-Copy Column Spans:** `column<T>()` hands a column's dense values to BLAS / a SIMD kernel / numpy with no copy; `row_indices<T>()` maps them back to handles.
-- **Validity Bitmaps:** `validity<T>()` produces an Arrow-style packed presence bitmap for branchless masked iteration and interchange.
-- **Serialization:** opt-in `<soatable/serialize.hpp>` `save()` / `load()` snapshot trivially-copyable tables to a versioned, schema-checked byte buffer.
-- **Pluggable Storage Layout:** the default `soa_table` is flat and SIMD-aligned; `aosoa_table<TileSize, ...>` opts into tiled (AoSoA-style) storage with bounded reallocation, and `column_tiles<T>()` views either as per-tile aligned spans.
-- **Vectorized Compute:** opt-in `<soatable/compute.hpp>` provides `transform` / `reduce` / `inclusive_scan` / `count_if` over column spans, policy-agnostic `transform_column` / `reduce_column`, and cross-column `assign_from<Out, In...>()` (e.g. `pnl = price * qty`).
-- **Query Helpers:** opt-in `<soatable/query.hpp>` adds `select_where<Cols...>()` predicate filtering and group-by aggregation (`group_sum` / `group_count` / `group_reduce`).
-- **Custom Allocators:** `custom_soa_table<Allocator, ...>` plugs in any allocator; opt-in `<soatable/pmr.hpp>` `pmr_soa_table` routes column storage through a `std::pmr` arena / monotonic / pool resource.
-- **Freestanding / No-Exceptions:** define `SOATABLE_NO_EXCEPTIONS` to build without throwing (and without RTTI) for embedded / flight / kernel contexts, using `get_expected<T>()` for error handling.
-- **Chunked Storage & Concurrency:** `chunked_soa_table<ChunkSize, ...>` exposes Arrow-style record batches with `compute::transform_column_parallel`; opt-in `<soatable/concurrent.hpp>` `synchronized_table` gives many-reader / one-writer access via scoped `read()` / `write()`.
-- **Out-of-Core Columns:** opt-in `<soatable/mmap.hpp>` `mmap_soa_table` backs columns with demand-paged memory-mapped storage so a column can exceed physical RAM, paged in lazily by the OS.
-- **Time-Series Helpers:** opt-in `<soatable/timeseries.hpp>` adds rolling windows, deltas, and dirty-region scans built on `delta_value` / `dirty_mask`.
-- **Dimensional Safety:** opt-in `<soatable/units.hpp>` `quantity<T, Dimension>` rejects adding metres to seconds at compile time; usable as a column type.
-- **Runtime Schema Evolution:** opt-in `<soatable/dynamic.hpp>` `dynamic_table` adds/removes typed columns at runtime with per-column metadata.
-- **Debugger Visualizers:** MSVC `.natvis` and GDB pretty-printers under `tools/visualizers/`.
+**Prefer a plain `std::vector<Struct>` when:** the table is tiny, rows are always dense, and every pass
+touches every field. SoaTable's win grows with size, sparsity, and how selective your queries are.
 
-### Naming
-
-The public API uses std-style lowercase names (`soa_table`, `row_handle`, `column_vector`, `delta_value`, `dirty_mask`). The previous PascalCase spellings (`SoaTable`, `RowHandle`, ...) remain as `[[deprecated]]` aliases for one migration window and will be removed in a future major release.
-
-## Quick Start
+## Quick start
 
 ```cpp
 #include <soatable/soatable.hpp>
 #include <print>
 
 struct Health { float value; };
-struct Name { std::string value; };
-struct Poisoned {}; // Component with no data
+struct Name   { std::string value; };
+struct Poisoned {};                 // A data-less tag component.
 
 int main() {
     soatable::soa_table<Health, Name, Poisoned> table;
 
-    // Insertion
-    auto id = table.insert();
+    const auto id = table.insert();  // Stable handle, valid until erased.
     table.assign<Name>(id, "Warrior");
     table.assign<Health>(id, 100.0f);
 
     // Reference-semantic views: structured bindings yield real references (no .get()).
     for (auto [row, health, name] : table.view<Health, Name>()) {
-        std::println("Row {}: {} has {} health", row.index, name.value, health.value);
+        health.value -= 10.0f;       // Writes straight through to the column.
+        std::println("{} has {} health", name.value, health.value);
     }
 
-    // Optional columns still use select<>(), which returns reference_wrapper tuples.
+    // Optional columns: select<>() includes rows that may or may not have Poisoned.
     for (auto [row, name, poison] : table.select<Name, std::optional<Poisoned>>()) {
-        if (poison) {
-            std::println("{} is poisoned!", name.get().value);
-        }
+        if (poison) std::println("{} is poisoned!", name.get().value);
     }
 }
 ```
 
-## Real-World Example
+## Feature tour (what / why / how)
 
-This example demonstrates how to use SoaTable for a vehicle fleet management system, utilizing batch operations, sparse joins, multi-column sorting, and data compression.
+### 1. The container: sparse columns + stable handles
+
+**What.** `soa_table<Columns...>` registers a fixed set of column types. `insert()` returns a `row_id`;
+`assign<T>` / `unassign<T>` add or drop a column on a row; `erase` removes a row.
+
+**Why.** Columns are stored densely and independently, so a column only allocates for rows that have it
+(true sparsity), and iterating one column is cache-friendly. `row_id` is a generational handle
+(`index` + `generation`), so a stale handle to an erased-then-reused slot is detected rather than
+silently aliasing a new row (the ABA problem).
+
+**How.**
 
 ```cpp
-#include <soatable/soatable.hpp>
-#include <iostream>
-#include <vector>
-#include <string>
-#include <optional>
-#include <utility>
-#include <cstdint>
-#include <print>
-
-// 1. Data Compression Utilities
-struct Status {
-    uint8_t flags = 0;
-    // packed_bits: [0-1] Engine State, [2-2] Lights, [3-3] Wiper
-    using EngineState = soatable::packed_bits<uint8_t, uint8_t, 0, 2>;
-    using Lights      = soatable::packed_bits<uint8_t, bool, 2, 1>;
-
-    void set_engine(uint8_t state) { EngineState::set(flags, state); }
-};
-
-struct Position { float x, y; };
-
-// Using quantized_float for Speed (0-200 km/h) and Fuel (0-100%)
-using Speed = soatable::quantized_float<uint16_t, 0, 200000, 16>;
-using Fuel  = soatable::quantized_float<uint8_t, 0, 100000, 8>;
-
-struct Driver { std::string name; };
-struct Maintenance { bool urgent; };
-
-int main() {
-    // Define the table with various column types
-    soatable::soa_table<int, Position, Speed, Fuel, Status, soatable::delta_value<float>, Driver, Maintenance> fleet;
-
-    // 2. Batch Operations: High-throughput loading
-    auto ids = fleet.insert_batch(1000);
-    std::vector<int> vids(1000);
-    for(int i=0; i<1000; ++i) vids[i] = 1000 + i;
-    fleet.assign_batch<int>(ids, vids.begin());
-
-    // 3. Stable IDs: Keep a handle to a specific vehicle
-    auto my_truck_id = ids[50];
-    fleet.assign<Driver>(my_truck_id, "Alice");
-
-    // 4. Sparse Projection: Efficiently join required and optional columns
-    fleet.assign<Maintenance>(ids[10], Maintenance{true});
-    fleet.assign<Maintenance>(ids[50], Maintenance{false});
-
-    // Only iterates over rows that HAVE Maintenance. Driver is optional.
-    for (auto [row, maint, driver] : fleet.select<Maintenance, std::optional<Driver>>()) {
-        std::string name = driver ? driver->get().name : "Unknown";
-        std::println("Vehicle ID {}: Maintenance (Urgent: {}), Driver: {}", row.index, maint.get().urgent, name);
-    }
-
-    // 5. Multi-Column Sorting: Physically reorder all columns
-    // Sort by Fuel (ascending), then by Speed (descending)
-    fleet.sort_by_multi(
-        std::make_pair(Fuel{}, [](const Fuel& a, const Fuel& b) { return a.get() < b.get(); }),
-        std::make_pair(Speed{}, [](const Speed& a, const Speed& b) { return a.get() > b.get(); })
-    );
-
-    // 6. Parallel Sorting: Reorder columns in parallel for large datasets
-    fleet.sort_by_column_parallel<int>([](int a, int b) { return a < b; });
-
-    // 7. Data Compression: DeltaValue for smooth tracking
-    auto altitude_id = ids[0];
-    soatable::delta_value<float> alt(100.0f);
-    alt.apply_delta(alt.get_delta(105.0f));
-    fleet.assign<soatable::delta_value<float>>(altitude_id, alt);
-
-    return 0;
-}
+soatable::soa_table<Name, Age> t;
+auto id = t.insert();
+t.assign<Age>(id, 30);
+t.erase(id);
+assert(!t.is_valid(id));            // Generation bumped; the handle is now invalid.
 ```
 
-## Domain Cookbooks
+### 2. Querying: select, view, and structured bindings
 
-Worked, runnable examples showing SoaTable in each target domain (built as
-`soatable_cookbook_*` targets):
+**What.** `select<Cols...>()` and `view<Cols...>()` iterate the rows that have all requested columns.
+Use `std::optional<T>` in `select<>()` to include a column when present without requiring it.
 
-- [Finance — tick store](example/cookbook/finance_tick_store.cpp): ingest trades, derive P&L per row, aggregate notional volume per symbol.
-- [Game / ECS](example/cookbook/game_ecs.cpp): a sparse-component world with a motion system over `view<Position, Velocity>()`.
-- [Aerospace — telemetry](example/cookbook/aerospace_telemetry.cpp): `delta_value` altitude tracking, `dirty_mask` per-frame flags, and a validity bitmap.
-- [Scientific data](example/cookbook/scientific_table.cpp): zero-copy span compute and `quantized_float` confidence storage.
+**Why.** Both drive iteration off the **smallest** required column and check the rest via a per-row
+signature bitset, so a selective join scans far fewer rows than a full table scan. `view<>()` yields a
+`row_view` proxy that models the tuple protocol, so structured bindings give **real references** with no
+`.get()`; `select<>()` is the lower-level form (and the one that supports optional columns).
+
+**How.**
+
+```cpp
+for (auto [id, pos, vel] : t.view<Position, Velocity>()) pos.x += vel.x;     // real references
+for (auto [id, name, age] : t.select<Name, std::optional<Age>>()) { /* age may be empty */ }
+```
+
+### 3. Accessing values safely
+
+**What.** Three accessor styles, so you pick your failure mode:
+
+| Accessor | On missing column | Use when |
+| --- | --- | --- |
+| `get<T>(id)` | throws `std::out_of_range` | you expect it to be there |
+| `try_get<T>(id)` | returns `nullptr` | you want a cheap presence check |
+| `get_expected<T>(id)` | returns `std::expected<…, access_error>` | hot paths / no-exceptions builds |
+
+**Why.** Predictable error handling matters for finance and aerospace code that avoids exceptions on hot
+paths. `const` accessors yield `const` references end-to-end so a table is safely shareable read-only.
+
+### 4. Sorting and batch loading
+
+**What.** `sort_by_column<T>(cmp)`, `sort_by_multi(...)` (primary/secondary keys), and
+`sort_by_column_parallel<T>(cmp)` physically reorder every column. `insert_batch(n)` / `assign_batch<T>`
+load many rows at once.
+
+**Why.** Physical reordering keeps a column contiguous in a meaningful order (e.g. by timestamp) so later
+spans and rolling windows are correct. The parallel sort reorders columns concurrently above a size
+threshold and runs serially below it, where task-launch overhead would dominate.
+
+### 5. Zero-copy spans, validity bitmaps, serialization
+
+**What.** `column<T>()` returns a `std::span` over a column's dense values; `row_indices<T>()` maps each
+back to its row. `validity<T>()` returns a packed, Arrow-style presence `bitmap`. Opt-in
+`<soatable/serialize.hpp>` `save()`/`load()` snapshot a trivially-copyable table to a versioned,
+schema-checked byte buffer.
+
+**Why.** Spans are the keystone: hand a column straight to BLAS, an FFT, a SIMD kernel, or (later) numpy
+with **no copy**. Validity bitmaps enable branchless masked iteration and are the bridge to Arrow.
+Serialization gives simulation checkpoints and tick-store snapshots that round-trip handles and column
+order.
+
+**How.**
+
+```cpp
+std::span<Price> prices = t.column<Price>();        // contiguous, 64-byte aligned
+auto bytes = soatable::save(t);                     // #include <soatable/serialize.hpp>
+soatable::soa_table<...> restored;
+soatable::load(restored, bytes);
+```
+
+### 6. The compute layer (the "numpy part")
+
+**What.** Opt-in `<soatable/compute.hpp>`:
+
+- single-column ufuncs over spans — `transform`, `reduce`, `inclusive_scan`, `count_if`;
+- policy-agnostic column helpers — `transform_column`, `reduce_column`, `count_column_if`;
+- broadcasting and subsets — `add_scalar`, `transform_if`, `transform_masked`, `transform_strided`;
+- cross-column row-wise compute — `assign_from<Out, In...>()` (e.g. `pnl = price * qty`);
+- chunk-parallel — `transform_column_parallel`, `for_each_chunk`.
+
+**Why.** Express a vectorized operation once and let the compiler auto-vectorize over the 64-byte-aligned
+storage. Cross-column math goes through the `select`/`view` join because independent sparse columns are
+not row-aligned in storage — so `assign_from` only touches rows that have all inputs.
+
+**How.**
+
+```cpp
+soatable::compute::assign_from<Pnl, Price, Qty>(t,
+    [](const Price& p, const Qty& q) { return Pnl{p.value * q.value}; });
+double gross = soatable::compute::reduce_column<Pnl>(t, 0.0,
+    [](double acc, const Pnl& p) { return acc + p.value; });
+```
+
+### 7. Queries and aggregation
+
+**What.** Opt-in `<soatable/query.hpp>`: `select_where<Cols...>(t, predicate)` filters the join by a row
+predicate; `group_reduce` / `group_sum` / `group_count` aggregate by a projected key.
+
+**Why.** Analytics ergonomics — `where(...).select(...)` and group-by — without leaving C++ and without a
+query engine. Filtering composes lazily on top of the smallest-driver scan.
+
+**How.**
+
+```cpp
+auto volume = soatable::query::group_sum<Symbol, Notional>(t,
+    [](const Symbol& s){ return s.value; }, [](const Notional& n){ return n.value; });
+```
+
+### 8. Storage policies and allocators
+
+**What.** The layout is a policy on the table type, with the row API unchanged:
+
+- `soa_table<...>` — flat, contiguous, 64-byte SIMD-aligned (default).
+- `aosoa_table<Tile, ...>` / `chunked_soa_table<Chunk, ...>` — tiled (AoSoA / Arrow record-batch)
+  storage; growth never copies existing chunks. `column_tiles<T>()` views either layout as per-tile
+  aligned spans.
+- `custom_soa_table<Allocator, ...>` — any allocator; opt-in `<soatable/pmr.hpp>` `pmr_soa_table` uses a
+  `std::pmr` arena / monotonic / pool resource.
+- opt-in `<soatable/mmap.hpp>` `mmap_soa_table` — demand-paged memory-mapped storage so a column can
+  exceed physical RAM, paged in lazily by the OS.
+
+**Why.** Match storage to the workload without rewriting your code: SIMD-aligned contiguous for analytics,
+tiled for bounded reallocation and streaming, arena/pmr for deterministic real-time allocation, mmap for
+out-of-core datasets.
+
+### 9. Concurrency
+
+**What.** Opt-in `<soatable/concurrent.hpp>` `synchronized_table<Table>` wraps a table behind a
+`std::shared_mutex` with scoped `read()` / `write()` callbacks.
+
+**Why.** Many strategy threads can read a market-data table while one thread ingests, with the lock held
+for the duration of each callback so access is always synchronized.
+
+```cpp
+soatable::synchronized_table<Table> shared;
+shared.write([](Table& t){ t.insert(); });
+auto n = shared.read([](const Table& t){ return t.size(); });   // many readers concurrently
+```
+
+### 10. Domain helpers: compression, time-series, units, dynamic schema
+
+- **Compact storage** (core): `quantized_float` (lossy fixed-range floats in N bits), `packed_bits`
+  (bit-fields in an integer), `delta_value` (track a value via scaled deltas), `dirty_mask` (flag set).
+- **Time-series** (`<soatable/timeseries.hpp>`): `rolling_sum` / `rolling_mean` / `deltas`,
+  `rolling_mean_column`, and `for_each_dirty` for incremental recompute of changed rows.
+- **Dimensional safety** (`<soatable/units.hpp>`): `quantity<T, Dimension>` makes adding metres to seconds
+  a **compile error** while multiply/divide combine dimensions — usable directly as a column type.
+- **Runtime schema evolution** (`<soatable/dynamic.hpp>`): `dynamic_table` adds/removes typed columns at
+  runtime, type-checks access without RTTI, and carries per-column metadata (e.g. unit labels).
+
+### 11. Portability: freestanding and reflection
+
+- **Freestanding / no-exceptions:** define `SOATABLE_NO_EXCEPTIONS` to redirect every internal `throw` to
+  a terminating handler and rely on `get_expected<T>()` / `try_get<T>()`; the library uses no RTTI. A CI
+  leg builds this mode with `-fno-exceptions` for embedded / flight / kernel targets.
+- **C++26 reflection path** (`<soatable/reflect.hpp>`): `table_for<Struct>` builds a table from a struct.
+  Today you write a one-line `column_list` specialization; the `SOATABLE_HAS_REFLECTION`-gated automatic
+  path activates when a toolchain ships P2996 reflection.
+
+## The opt-in headers at a glance
+
+| Header | Provides | Pulls in |
+| --- | --- | --- |
+| `soatable/soatable.hpp` | the container, spans, validity, compression helpers | nothing extra |
+| `soatable/compute.hpp` | ufuncs, broadcasting, chunk-parallel compute | `<future>`, `<thread>` |
+| `soatable/query.hpp` | `select_where`, group-by aggregation | `<unordered_map>` |
+| `soatable/serialize.hpp` | versioned `save()` / `load()` | — |
+| `soatable/pmr.hpp` | `pmr_soa_table` | `<memory_resource>` |
+| `soatable/mmap.hpp` | `mmap_soa_table` (out-of-core) | `<sys/mman.h>` / `<windows.h>` |
+| `soatable/concurrent.hpp` | `synchronized_table` | `<shared_mutex>` |
+| `soatable/timeseries.hpp` | rolling windows, deltas, dirty scans | — |
+| `soatable/units.hpp` | dimensional `quantity` | — |
+| `soatable/dynamic.hpp` | runtime `dynamic_table` | `<unordered_map>` |
+| `soatable/reflect.hpp` | `table_for<Struct>` | — |
+
+## Domain cookbooks
+
+Runnable, worked examples (built as `soatable_cookbook_*` targets):
+
+- [Finance — tick store](example/cookbook/finance_tick_store.cpp): ingest trades, derive P&L per row,
+  aggregate notional volume per symbol, filter large trades.
+- [Game / ECS](example/cookbook/game_ecs.cpp): a sparse-component world with a motion system over
+  `view<Position, Velocity>()` and a data-less tag.
+- [Aerospace — telemetry](example/cookbook/aerospace_telemetry.cpp): `delta_value` altitude tracking,
+  `dirty_mask` per-frame flags, and a validity bitmap.
+- [Scientific data](example/cookbook/scientific_table.cpp): zero-copy span compute and `quantized_float`
+  storage.
+
+A broader [feature tour](example/soatable_example.cpp) exercises most headers in one program.
 
 ## Installation
 
-SoaTable is header-only and requires a C++23 compiler and CMake 3.25+.
+SoaTable is header-only and requires a C++23 compiler (GCC 13+, Clang 18+, MSVC) and CMake 3.25+.
 
 ### CMake
-
-Consume an installed package or add the repository as a subdirectory:
 
 ```cmake
 find_package(soatable CONFIG REQUIRED)
 target_link_libraries(your_target PRIVATE soatable::soatable)
 ```
 
-The repository ships `CMakePresets.json`. To build and test locally:
+### Conan / vcpkg
 
 ```sh
-cmake --preset clang      # or: gcc, msvc
-cmake --build --preset clang
-ctest --preset clang
-```
-
-### Conan
-
-A header-only recipe is provided at the repository root:
-
-```sh
-conan create .
-```
-
-### vcpkg
-
-Use the overlay port under `packaging/vcpkg/ports`:
-
-```sh
-vcpkg install soatable --overlay-ports=packaging/vcpkg/ports
+conan create .                                                   # header-only recipe at the repo root
+vcpkg install soatable --overlay-ports=packaging/vcpkg/ports     # overlay port
 ```
 
 ### Single-header drop-in
 
-SoaTable is already a single header. To generate a stamped, self-contained copy:
+The core `soatable.hpp` is self-contained. To emit a stamped copy for vendoring:
 
 ```sh
-python scripts/amalgamate.py   # writes dist/soatable.hpp
+python scripts/amalgamate.py            # writes dist/soatable.hpp
 ```
 
-### Documentation
+The opt-in add-on headers (`compute`, `query`, ...) are intentionally separate so you pay only for what
+you include; pass `--with compute,query` to bundle specific ones next to the core.
 
-API reference is published to GitHub Pages from the `main` branch. Build it locally with:
+## Benchmarks
+
+The suite covers insertion, erase-churn, single-column and parallel sort, sparse selection across
+density sweeps, the select driver heuristic, SoA-vs-AoSoA selection, and compute throughput, with
+Array-of-Structures and hand-rolled columnar baselines:
+
+```sh
+./scripts/run_benchmarks.sh             # builds the `bench` preset, writes bench/results.json
+```
+
+Representative selective-join results (250,000 rows, Release):
+
+| Method | Time |
+| --- | --- |
+| SoaTable `select` (smallest driver) | ~168,000 ns |
+| Forced largest-column driver | ~1,547,000 ns |
+| Hand-rolled columnar scan | ~1,058,000 ns |
+| AoS branch scan | ~1,303,000 ns |
+
+The ~9x gap between the smallest-driver and forced-largest-driver runs validates the heuristic of driving
+iteration off the smallest required column. Numbers are machine dependent; reproduce with the harness
+above.
+
+## Building, testing, docs
+
+```sh
+cmake --preset clang        # or: gcc, msvc, asan-ubsan, bench
+cmake --build --preset clang
+ctest --preset clang
+```
+
+CI builds GCC 13 / Clang 18 / MSVC plus an AddressSanitizer + UndefinedBehaviorSanitizer leg, all through
+these presets. Build the Doxygen API site locally with:
 
 ```sh
 cmake -S . -B build-docs -DSOATABLE_BUILD_DOCUMENTATION=ON
 cmake --build build-docs --target docs
 ```
 
-## Benchmarks
+## Versioning and naming
 
-The benchmark suite covers insertion, erase-churn, single-column and parallel sort, sparse selection
-across density sweeps, and the select driver heuristic, with Array-of-Structures and hand-rolled
-columnar baselines. Run it (records the toolchain and emits a JSON results file):
-
-```sh
-./scripts/run_benchmarks.sh   # builds the `bench` preset and writes bench/results.json
-```
-
-Representative selective-join results (250,000 rows, Release):
-
-| Method | Time |
-|-------------------------------------|----------------|
-| SoaTable `select` (smallest driver) | ~168,000 ns |
-| Forced largest-column driver | ~1,547,000 ns |
-| Hand-rolled columnar scan | ~1,058,000 ns |
-| AoS branch scan | ~1,303,000 ns |
-
-The ~9x gap between the smallest-driver and forced-largest-driver runs validates the heuristic of
-driving iteration off the smallest required column. Numbers are machine dependent; see the harness
-above to reproduce on your hardware.
+SoaTable follows [Semantic Versioning](https://semver.org). The public API uses std-style lowercase names
+(`soa_table`, `row_handle`, `column_vector`, `delta_value`, `dirty_mask`); the previous PascalCase
+spellings remain as `[[deprecated]]` aliases for one migration window. See [CHANGELOG.md](CHANGELOG.md)
+for the history and [CONTRIBUTING.md](CONTRIBUTING.md) to get started.
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).

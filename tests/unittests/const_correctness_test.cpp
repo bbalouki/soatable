@@ -1,5 +1,7 @@
-// Const-correctness contract (Phase 2.2): compile-time assertions that const accessors yield const
-// references end to end, plus a runtime read through a const table.
+/// @file const_correctness_test.cpp
+/// @brief Const-correctness contract (Phase 2.2): compile-time assertions that const accessors
+/// yield const references end to end, plus a runtime read through a const table.
+/// @author Bertin Balouki SIMYELI
 
 #include <gtest/gtest.h>
 

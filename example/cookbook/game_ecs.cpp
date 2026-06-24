@@ -1,5 +1,9 @@
-// Game / ECS cookbook: a world of entities with sparse components. Integrate motion over the
-// entities that have both Position and Velocity, and tag a subset with a data-less component.
+/// @file game_ecs.cpp
+/// @brief Game / ECS cookbook: a world of entities with sparse components.
+/// @author Bertin Balouki SIMYELI
+///
+/// Integrate motion over the entities that have both Position and Velocity, and tag a subset with a
+/// data-less component.
 
 #include <string>
 

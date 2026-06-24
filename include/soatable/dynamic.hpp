@@ -1,10 +1,13 @@
+/// @file dynamic.hpp
+/// @brief Opt-in runtime schema evolution: a type-erased table whose columns are added and removed
+/// at runtime by name, with per-column string metadata.
+/// @author Bertin Balouki SIMYELI
+///
+/// It complements the statically-typed soa_table for schemas that are not known at compile time.
+/// Columns are type-checked without RTTI (each type has a unique key address), so set<T>/get<T>
+/// reject a type mismatch. Cells are stored sparsely per column, mirroring soa_table's "pay only
+/// for columns a row has" model.
 #pragma once
-
-// Opt-in runtime schema evolution: a type-erased table whose columns are added and removed at
-// runtime by name, with per-column string metadata. It complements the statically-typed soa_table
-// for schemas that are not known at compile time. Columns are type-checked without RTTI (each type
-// has a unique key address), so set<T>/get<T> reject a type mismatch. Cells are stored sparsely per
-// column, mirroring soa_table's "pay only for columns a row has" model.
 
 #include <cstddef>
 #include <memory>

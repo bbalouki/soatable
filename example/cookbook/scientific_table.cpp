@@ -1,5 +1,9 @@
-// Scientific cookbook: a measurement table. Hand a column straight to a vectorized kernel via the
-// zero-copy span, reduce it, and store a compact quantized confidence per sample.
+/// @file scientific_table.cpp
+/// @brief Scientific cookbook: a measurement table.
+/// @author Bertin Balouki SIMYELI
+///
+/// Hand a column straight to a vectorized kernel via the zero-copy span, reduce it, and store a
+/// compact quantized confidence per sample.
 
 #include <cmath>
 #include <cstdint>

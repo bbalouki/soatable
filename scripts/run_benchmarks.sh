@@ -13,7 +13,8 @@ mkdir -p "${OUT_DIR}"
 cmake --preset bench
 cmake --build --preset bench
 
-BENCH_BIN="$(find "${ROOT}/build/bench" -name 'soatable_benchmark*' -type f -perm -u+x | head -n1)"
+# Match the executable on both POSIX (no extension) and Windows (.exe) without relying on perms.
+BENCH_BIN="$(find "${ROOT}/build/bench" -type f \( -name 'soatable_benchmark' -o -name 'soatable_benchmark.exe' \) | head -n1)"
 if [[ -z "${BENCH_BIN}" ]]; then
     echo "Benchmark binary not found under build/bench" >&2
     exit 1

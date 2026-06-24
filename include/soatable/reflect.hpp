@@ -1,13 +1,15 @@
+/// @file reflect.hpp
+/// @brief Build a table directly from a plain struct.
+/// @author Bertin Balouki SIMYELI
+///
+/// C++26 static reflection (P2996) is not yet available in shipping toolchains, so this header
+/// provides a portable fallback that works today and an automatic path that activates once a
+/// compiler implements reflection:
+///
+/// * Portable (now): specialize columns_of<Struct> (via column_list) to list the struct's column
+/// types, then use table_for<Struct>. * Automatic (future): when SOATABLE_HAS_REFLECTION is 1,
+/// columns_of<Struct> is derived from the struct's members with no manual specialization.
 #pragma once
-
-// Build a table directly from a plain struct. C++26 static reflection (P2996) is not yet available
-// in shipping toolchains, so this header provides a portable fallback that works today and an
-// automatic path that activates once a compiler implements reflection:
-//
-//   * Portable (now): specialize columns_of<Struct> (via column_list) to list the struct's column
-//     types, then use table_for<Struct>.
-//   * Automatic (future): when SOATABLE_HAS_REFLECTION is 1, columns_of<Struct> is derived from the
-//     struct's members with no manual specialization.
 
 #include "soatable/soatable.hpp"
 

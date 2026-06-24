@@ -1,6 +1,10 @@
-// Property test: drive a deterministic (fixed-seed) sequence of insert/assign/unassign/erase/sort
-// operations and, after every step, assert the table agrees with an independent reference model.
-// This pins the sparse <-> dense <-> data consistency invariant that underpins every operation.
+/// @file invariant_test.cpp
+/// @brief Property test: drive a deterministic (fixed-seed) sequence of
+/// insert/assign/unassign/erase/sort operations and, after every step, assert the table agrees with
+/// an independent reference model.
+/// @author Bertin Balouki SIMYELI
+///
+/// This pins the sparse <-> dense <-> data consistency invariant that underpins every operation.
 
 #include <gtest/gtest.h>
 

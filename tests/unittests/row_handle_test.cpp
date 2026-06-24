@@ -1,4 +1,7 @@
-// row_handle convenience wrapper: binding, validity, column access, and unbound-handle errors.
+/// @file row_handle_test.cpp
+/// @brief row_handle convenience wrapper: binding, validity, column access, and unbound-handle
+/// errors.
+/// @author Bertin Balouki SIMYELI
 
 #include <gtest/gtest.h>
 
