@@ -3,6 +3,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <span>
 #include <vector>
 
@@ -90,6 +91,70 @@ TEST(ComputeTest, AssignFromComputesCrossColumn) {
         sum_pnl += pnl.get().value;
     }
     EXPECT_DOUBLE_EQ(sum_pnl, 1.0 + 4.0 + 9.0 + 16.0);
+}
+
+TEST(ComputeTest, BroadcastAddAndMultiplyScalar) {
+    std::vector<double> data = {1.0, 2.0, 3.0};
+    soatable::compute::add_scalar(std::span<double>(data), 10.0);
+    EXPECT_EQ(data, (std::vector<double> {11.0, 12.0, 13.0}));
+    soatable::compute::multiply_scalar(std::span<double>(data), 2.0);
+    EXPECT_EQ(data, (std::vector<double> {22.0, 24.0, 26.0}));
+}
+
+TEST(ComputeTest, TransformIfOnlyFlaggedElements) {
+    std::vector<int> data = {1, 6, 3, 8, 4};
+    soatable::compute::transform_if(
+        std::span<int>(data), [](int x) { return x > 4; }, [](int x) { return x * 10; }
+    );
+    EXPECT_EQ(data, (std::vector<int> {1, 60, 3, 80, 4}));
+}
+
+TEST(ComputeTest, TransformMaskedByParallelMask) {
+    std::vector<int>          data = {1, 2, 3, 4, 5};
+    std::vector<std::uint8_t> mask = {1, 0, 1, 0, 1};
+    soatable::compute::transform_masked(
+        std::span<int>(data), std::span<const std::uint8_t>(mask), [](int x) { return -x; }
+    );
+    EXPECT_EQ(data, (std::vector<int> {-1, 2, -3, 4, -5}));
+}
+
+TEST(ComputeTest, TransformStridedEveryNth) {
+    std::vector<int> data = {1, 1, 1, 1, 1, 1};
+    soatable::compute::transform_strided(std::span<int>(data), 2, [](int x) { return x + 9; });
+    EXPECT_EQ(data, (std::vector<int> {10, 1, 10, 1, 10, 1}));
+}
+
+TEST(ComputeTest, BroadcastColumnBiasAcrossTiles) {
+    TiledBook book;
+    for (int i = 0; i < 10; ++i) {
+        const auto id = book.insert();
+        book.assign<Price>(id, Price {static_cast<double>(i)});
+    }
+    soatable::compute::broadcast_column<Price>(book, 100.0, [](Price p, double s) {
+        return Price {p.value + s};
+    });
+
+    const double total =
+        soatable::compute::reduce_column<Price>(book, 0.0, [](double acc, const Price& p) {
+            return acc + p.value;
+        });
+    EXPECT_DOUBLE_EQ(total, (0 + 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9) + 10 * 100.0);
+}
+
+TEST(ComputeTest, TransformColumnIfAcrossTiles) {
+    TiledBook book;
+    for (int i = 0; i < 10; ++i) {
+        const auto id = book.insert();
+        book.assign<Qty>(id, Qty {i});
+    }
+    soatable::compute::transform_column_if<Qty>(
+        book, [](const Qty& q) { return q.value % 2 == 0; }, [](Qty q) { return Qty {q.value + 100}; }
+    );
+
+    const auto biased = soatable::compute::count_column_if<Qty>(book, [](const Qty& q) {
+        return q.value >= 100;
+    });
+    EXPECT_EQ(biased, 5U);  // even values 0,2,4,6,8
 }
 
 TEST(ComputeTest, AssignFromOnlyTouchesRowsWithAllInputs) {

@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <concepts>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <numeric>
 #include <span>
@@ -117,6 +118,97 @@ template <typename T, typename Storage, typename... Columns, typename Pred>
         total += compute::count_if(tile, pred);
     }
     return total;
+}
+
+// =========================
+// Broadcasting, masked, and strided ops
+// =========================
+
+/// @brief Broadcast a scalar over a column span in place: values[i] = op(values[i], scalar).
+/// @param values The span to modify.
+/// @param scalar The scalar operand applied to every element.
+/// @param op The combining operation (defaults to addition).
+template <typename T, typename Scalar, typename BinaryOp = std::plus<>>
+void broadcast(std::span<T> values, const Scalar& scalar, BinaryOp op = {}) {
+    for (T& value : values) {
+        value = op(value, scalar);
+    }
+}
+
+/// @brief Add a scalar to every element of a column span (a column bias).
+template <typename T, typename Scalar>
+void add_scalar(std::span<T> values, const Scalar& scalar) {
+    broadcast(values, scalar, std::plus<> {});
+}
+
+/// @brief Multiply every element of a column span by a scalar.
+template <typename T, typename Scalar>
+void multiply_scalar(std::span<T> values, const Scalar& scalar) {
+    broadcast(values, scalar, std::multiplies<> {});
+}
+
+/// @brief Transform only the elements that satisfy a predicate (a value-flagged subset).
+/// @param values The span to modify.
+/// @param pred A predicate over const T& selecting which elements to transform.
+/// @param op A callable mapping a selected element to its new value.
+template <typename T, typename Pred, typename UnaryOp>
+void transform_if(std::span<T> values, Pred pred, UnaryOp op) {
+    for (T& value : values) {
+        if (pred(value)) {
+            value = op(value);
+        }
+    }
+}
+
+/// @brief Transform the elements flagged by a parallel byte mask of equal length.
+/// @param values The span to modify.
+/// @param mask A span where a non-zero entry flags the element at the same index.
+/// @param op A callable mapping a flagged element to its new value.
+template <typename T, typename UnaryOp>
+void transform_masked(std::span<T> values, std::span<const std::uint8_t> mask, UnaryOp op) {
+    const std::size_t count = std::min(values.size(), mask.size());
+    for (std::size_t i = 0; i < count; ++i) {
+        if (mask[i] != 0) {
+            values[i] = op(values[i]);
+        }
+    }
+}
+
+/// @brief Transform every stride-th element of a column span (a strided subset).
+/// @param values The span to modify.
+/// @param stride The step between transformed elements (must be positive).
+/// @param op A callable mapping a selected element to its new value.
+template <typename T, typename UnaryOp>
+void transform_strided(std::span<T> values, std::size_t stride, UnaryOp op) {
+    for (std::size_t i = 0; i < values.size(); i += stride) {
+        values[i] = op(values[i]);
+    }
+}
+
+/// @brief Broadcast a scalar over a whole column in place (works for SoA and AoSoA storage).
+/// @tparam T The column type.
+/// @param table The table.
+/// @param scalar The scalar operand.
+/// @param op The combining operation (defaults to addition).
+template <typename T, typename Storage, typename... Columns, typename Scalar,
+          typename BinaryOp = std::plus<>>
+void broadcast_column(basic_soa_table<Storage, Columns...>& table, const Scalar& scalar,
+                      BinaryOp op = {}) {
+    for (std::span<T> tile : table.template column_tiles<T>()) {
+        compute::broadcast(tile, scalar, op);
+    }
+}
+
+/// @brief Transform a column's flagged values in place across both storage policies.
+/// @tparam T The column type.
+/// @param table The table.
+/// @param pred A predicate over const T& selecting which values to transform.
+/// @param op A callable mapping a selected value to its new value.
+template <typename T, typename Storage, typename... Columns, typename Pred, typename UnaryOp>
+void transform_column_if(basic_soa_table<Storage, Columns...>& table, Pred pred, UnaryOp op) {
+    for (std::span<T> tile : table.template column_tiles<T>()) {
+        compute::transform_if(tile, pred, op);
+    }
 }
 
 // =========================
