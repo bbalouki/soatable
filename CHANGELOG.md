@@ -32,6 +32,9 @@ Foundational layout primitives (FEATURES Phase A) and the start of the compute l
 - Chunked column storage: the `chunked_soa_table<ChunkSize, Columns...>` alias frames the tiled
   storage policy as Arrow-style record batches, plus `compute::for_each_chunk` and
   `compute::transform_column_parallel` for per-chunk iteration and parallelism (D.2).
+- Concurrent access: opt-in `<soatable/concurrent.hpp>` `synchronized_table` wraps a table behind a
+  `std::shared_mutex`, offering many concurrent readers and exclusive writers through scoped
+  `read()` / `write()` callbacks (D.1).
 
 - `column<T>()` (and a `const` overload) returning a `std::span` over a column's dense values, plus
   `row_indices<T>()` and `make_row_id()` to map dense positions back to stable handles (A.1).
