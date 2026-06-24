@@ -35,6 +35,9 @@ Foundational layout primitives (FEATURES Phase A) and the start of the compute l
 - Concurrent access: opt-in `<soatable/concurrent.hpp>` `synchronized_table` wraps a table behind a
   `std::shared_mutex`, offering many concurrent readers and exclusive writers through scoped
   `read()` / `write()` callbacks (D.1).
+- Memory-mapped columns: opt-in `<soatable/mmap.hpp>` `mmap_soa_table` backs columns with
+  page-granular, demand-paged virtual memory (`mmap` / `VirtualAlloc`) so a column can exceed the
+  resident set; mappings are page-aligned and SIMD-friendly (D.3).
 
 - `column<T>()` (and a `const` overload) returning a `std::span` over a column's dense values, plus
   `row_indices<T>()` and `make_row_id()` to map dense positions back to stable handles (A.1).

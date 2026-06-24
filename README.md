@@ -74,6 +74,7 @@ In our benchmarks, SoaTable's `select` queries are often **5x to 15x faster** th
 - **Custom Allocators:** `custom_soa_table<Allocator, ...>` plugs in any allocator; opt-in `<soatable/pmr.hpp>` `pmr_soa_table` routes column storage through a `std::pmr` arena / monotonic / pool resource.
 - **Freestanding / No-Exceptions:** define `SOATABLE_NO_EXCEPTIONS` to build without throwing (and without RTTI) for embedded / flight / kernel contexts, using `get_expected<T>()` for error handling.
 - **Chunked Storage & Concurrency:** `chunked_soa_table<ChunkSize, ...>` exposes Arrow-style record batches with `compute::transform_column_parallel`; opt-in `<soatable/concurrent.hpp>` `synchronized_table` gives many-reader / one-writer access via scoped `read()` / `write()`.
+- **Out-of-Core Columns:** opt-in `<soatable/mmap.hpp>` `mmap_soa_table` backs columns with demand-paged memory-mapped storage so a column can exceed physical RAM, paged in lazily by the OS.
 
 ### Naming
 
