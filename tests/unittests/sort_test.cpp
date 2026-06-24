@@ -111,3 +111,30 @@ TEST(SortTest, ParallelSortHandlesSingleColumnTable) {
     }
     EXPECT_EQ(ages, (std::vector<int> {1, 3}));
 }
+
+TEST(SortTest, ParallelSortLargeTableExercisesConcurrentPath) {
+    // Exceed parallel_sort_threshold so the genuine multi-column concurrent reorder runs, and verify
+    // it produces a fully sorted, internally consistent table.
+    constexpr int row_count = 20000;
+    DemoTable     table;
+    table.reserve(row_count);
+
+    for (int i = 0; i < row_count; ++i) {
+        const auto id = table.insert();
+        table.assign<Age>(id, (row_count - i) % 997);  // Deterministic, non-monotonic.
+        table.assign<Name>(id, "n");
+    }
+
+    table.sort_by_column_parallel<Age>([](const Age& a, const Age& b) { return a.value < b.value; });
+
+    int  previous = -1;
+    int  seen     = 0;
+    for (auto [id, age, name] : table.select<Age, Name>()) {
+        EXPECT_TRUE(table.is_valid(id));
+        EXPECT_GE(age.get().value, previous);  // Non-decreasing => sorted.
+        EXPECT_EQ(name.get().value, "n");
+        previous = age.get().value;
+        ++seen;
+    }
+    EXPECT_EQ(seen, row_count);
+}

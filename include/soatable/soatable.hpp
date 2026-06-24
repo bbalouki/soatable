@@ -14,6 +14,7 @@
 #include <optional>
 #include <ranges>
 #include <stdexcept>
+#include <thread>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -692,6 +693,12 @@ class soa_table {
     static constexpr std::uint32_t npos = std::numeric_limits<std::uint32_t>::max();
     /// @brief Generation value at which a slot is retired instead of recycled (ABA wraparound bound).
     static constexpr std::uint32_t max_generation = std::numeric_limits<std::uint32_t>::max();
+    /// @brief Alive-row count below which sort_by_column_parallel falls back to a serial sort.
+    ///
+    /// Below this size the per-column task-launch overhead dominates the work saved, so the parallel
+    /// path is not worthwhile. The crossover is machine dependent; this is a conservative default
+    /// measured to favour the serial path for small tables.
+    static constexpr std::size_t parallel_sort_threshold = 4096;
 
     /// @brief Metadata for all row slots.
     std::vector<row_meta> m_rows;
@@ -1303,11 +1310,18 @@ class soa_table {
         sort_by_column<T>(std::forward<Compare>(comp));
     }
 
-    /// @brief Parallel version of sort_by_column. Reorders columns in parallel to speed up the
+    /// @brief Parallel version of sort_by_column. Reorders columns concurrently to speed up the
     /// process.
     /// @tparam T The type of the column to sort by.
     /// @tparam Compare The type of the comparator.
     /// @param comp The comparator to use for sorting values of type T.
+    /// @note Threading model: the row order is computed once on the calling thread, then each column
+    /// is reordered independently (columns are the unit of parallelism). The calling thread reorders
+    /// the last column itself while @c column_count-1 std::async tasks handle the rest, so the caller
+    /// is never idle. It falls back to a serial sort when there is a single column, a single hardware
+    /// thread, or fewer than @ref parallel_sort_threshold alive rows, where task-launch overhead
+    /// would dominate. A persistent thread pool is deliberately avoided: soa_table is a value-semantic
+    /// container, and owning worker threads would complicate its copy/move/lifetime semantics.
     /// @note Basic exception guarantee. An exception thrown while reordering a column is rethrown by
     /// future::get after all tasks join, leaving the table valid but partially reordered.
     template <typename T, typename Compare>
@@ -1315,37 +1329,56 @@ class soa_table {
     void sort_by_column_parallel(Compare&& comp) {
         if constexpr (column_count <= 1) {
             sort_by_column<T>(std::forward<Compare>(comp));
-            return;
-        }
+        } else {
+            if (m_alive_count < parallel_sort_threshold || std::thread::hardware_concurrency() <= 1) {
+                sort_by_column<T>(std::forward<Compare>(comp));
+                return;
+            }
 
-        auto&       pool  = std::get<column_vector<T>>(m_columns);
-        const auto& dense = pool.dense_rows();
+            auto&       pool  = std::get<column_vector<T>>(m_columns);
+            const auto& dense = pool.dense_rows();
 
-        std::vector<std::uint32_t> sorted_rows = dense;
-        std::sort(sorted_rows.begin(), sorted_rows.end(), [&](std::uint32_t a, std::uint32_t b) {
-            return std::invoke(comp, pool.get(a), pool.get(b));
-        });
+            std::vector<std::uint32_t> sorted_rows = dense;
+            std::sort(
+                sorted_rows.begin(), sorted_rows.end(),
+                [&](std::uint32_t a, std::uint32_t b) {
+                    return std::invoke(comp, pool.get(a), pool.get(b));
+                }
+            );
 
-        std::vector<std::future<void>> futures;
-        futures.reserve(column_count);
+            std::vector<std::future<void>> futures;
+            futures.reserve(column_count - 1);
 
-        std::apply(
-            [&](auto&... column_pool) {
-                (futures.push_back(
-                     std::async(
-                         std::launch::async,
-                         [pool_ptr = &column_pool, &sorted_rows]() {
-                             pool_ptr->reorder(sorted_rows);
-                         }
-                     )
-                 ),
-                 ...);
-            },
-            m_columns
-        );
+            // Dispatch every column but the last as an async task, then reorder the last column on
+            // the calling thread so it overlaps the helper tasks instead of blocking idle.
+            std::size_t column_index = 0;
+            std::apply(
+                [&](auto&... column_pool) {
+                    (
+                        [&] {
+                            if (column_index == column_count - 1) {
+                                column_pool.reorder(sorted_rows);
+                            } else {
+                                futures.push_back(
+                                    std::async(
+                                        std::launch::async,
+                                        [pool_ptr = &column_pool, &sorted_rows]() {
+                                            pool_ptr->reorder(sorted_rows);
+                                        }
+                                    )
+                                );
+                            }
+                            ++column_index;
+                        }(),
+                        ...
+                    );
+                },
+                m_columns
+            );
 
-        for (auto& future : futures) {
-            future.get();
+            for (auto& future : futures) {
+                future.get();
+            }
         }
     }
 

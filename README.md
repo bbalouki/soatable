@@ -235,12 +235,26 @@ cmake --build build-docs --target docs
 
 ## Benchmarks
 
-Benchmark results (250,000 rows, selective join):
+The benchmark suite covers insertion, erase-churn, single-column and parallel sort, sparse selection
+across density sweeps, and the select driver heuristic, with Array-of-Structures and hand-rolled
+columnar baselines. Run it (records the toolchain and emits a JSON results file):
+
+```sh
+./scripts/run_benchmarks.sh   # builds the `bench` preset and writes bench/results.json
+```
+
+Representative selective-join results (250,000 rows, Release):
+
 | Method | Time |
-|-------------------|----------------|
-| SoaTable `select` | ~162,000 ns |
-| AoS Branch Scan | ~2,035,000 ns |
-_Run on 4x 2300 MHz CPU, Release Build._
+|-------------------------------------|----------------|
+| SoaTable `select` (smallest driver) | ~168,000 ns |
+| Forced largest-column driver | ~1,547,000 ns |
+| Hand-rolled columnar scan | ~1,058,000 ns |
+| AoS branch scan | ~1,303,000 ns |
+
+The ~9x gap between the smallest-driver and forced-largest-driver runs validates the heuristic of
+driving iteration off the smallest required column. Numbers are machine dependent; see the harness
+above to reproduce on your hardware.
 
 ## License
 

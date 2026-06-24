@@ -111,13 +111,12 @@ layouts, and emerging **C++26 reflection**-based SoA generation.
 
 ## Phase C — Portability & interop (P1 / P2)
 
-### C.1 C API + stable-ABI shim and language bindings
+### C.1 Language bindings
 
-- **What:** A C-linkage facade over a fixed set of column types, plus first-class **Python** bindings
-  (nanobind/pybind11) and a path for Rust / C# FFI.
+- **What:** A First-class **Python** bindings (pybind11).
 - **Use cases:** This is the literal "numpy" forcing function — let data scientists `import soatable`
-  and get zero-copy numpy arrays via the buffer protocol; let Rust/C# embed the same store.
-- **Sketch:** A C ABI exposing handle/column/select; a Python module mapping columns to numpy arrays
+  and get zero-copy numpy arrays via the buffer protocol.
+- **Sketch:** Python module mapping columns to numpy arrays
   through A.1 spans + the buffer protocol. **Priority:** P1 · **Effort:** L
 
 ### C.2 Custom allocators
