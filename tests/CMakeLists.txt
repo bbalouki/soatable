@@ -44,6 +44,7 @@ set(SOATABLE_UNIT_TEST_SOURCES
     unittests/aosoa_test.cpp
     unittests/compute_test.cpp
     unittests/query_test.cpp
+    unittests/allocator_test.cpp
     unittests/const_correctness_test.cpp
     unittests/deprecated_alias_test.cpp
     unittests/include_hygiene_test.cpp

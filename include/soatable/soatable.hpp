@@ -362,15 +362,27 @@ using select_result_t = std::tuple<
 // 1b. Column storage policies
 // =================================
 
-/// @brief Storage policy: a flat, contiguous, over-aligned column (the default Structure-of-Arrays
-/// layout). column<T>() exposes a single contiguous span.
-struct soa_layout {
-    /// @brief The dense container backing a column of T.
+/// @brief Storage policy: a flat, contiguous column allocated with a caller-chosen allocator.
+/// @tparam Allocator A single-argument allocator template applied per element type
+/// (e.g. std::pmr::polymorphic_allocator). Compose with custom_soa_table.
+template <template <typename> class Allocator>
+struct soa_layout_with {
+    /// @brief The dense container backing a column of T, using the chosen allocator.
     template <typename T>
-    using container_type = detail::aligned_vector<T>;
-    /// @brief Whether a column is a single contiguous block.
+    using container_type = std::vector<T, Allocator<T>>;
+    /// @brief A flat column is a single contiguous block.
     static constexpr bool is_contiguous = true;
 };
+
+namespace detail {
+/// @brief The default column allocator: over-aligned to column_alignment<T> for SIMD-friendly spans.
+template <typename T>
+using default_column_allocator = aligned_allocator<T>;
+}  // namespace detail
+
+/// @brief Storage policy: a flat, contiguous, over-aligned column (the default Structure-of-Arrays
+/// layout). column<T>() exposes a single contiguous span.
+struct soa_layout : soa_layout_with<detail::default_column_allocator> {};
 
 /// @brief Storage policy: a tiled (AoSoA-style) column whose dense values live in fixed-size,
 /// individually over-aligned tiles. Bounds reallocation cost on growth and is the natural unit for
@@ -1794,6 +1806,12 @@ using soa_table = basic_soa_table<soa_layout, Columns...>;
 /// @tparam Columns The unique column types.
 template <std::size_t TileSize, typename... Columns>
 using aosoa_table = basic_soa_table<aosoa_layout<TileSize>, Columns...>;
+
+/// @brief A flat table whose columns are allocated with a caller-supplied allocator template.
+/// @tparam Allocator A single-argument allocator template (e.g. a pmr or arena allocator).
+/// @tparam Columns The unique column types.
+template <template <typename> class Allocator, typename... Columns>
+using custom_soa_table = basic_soa_table<soa_layout_with<Allocator>, Columns...>;
 
 // =====================
 // 5. Row handle helper

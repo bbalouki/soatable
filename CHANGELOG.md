@@ -20,6 +20,9 @@ Foundational layout primitives (FEATURES Phase A) and the start of the compute l
 - Broadcasting, masked, and strided column ops in `<soatable/compute.hpp>`: `broadcast` /
   `add_scalar` / `multiply_scalar`, `transform_if` / `transform_masked` / `transform_strided`, and the
   table-level `broadcast_column` / `transform_column_if` (B.3).
+- Allocator-aware columns: `soa_layout_with<Allocator>` storage policy and `custom_soa_table<Allocator,
+  Columns...>` let columns use a caller-supplied allocator; opt-in `<soatable/pmr.hpp>` adds
+  `pmr_soa_table` backed by the active `std::pmr` memory resource (C.2).
 
 - `column<T>()` (and a `const` overload) returning a `std::span` over a column's dense values, plus
   `row_indices<T>()` and `make_row_id()` to map dense positions back to stable handles (A.1).
