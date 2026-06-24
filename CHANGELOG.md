@@ -7,9 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Foundational layout primitives (FEATURES Phase A).
+Foundational layout primitives (FEATURES Phase A) and the start of the compute layer (Phase B).
 
 ### Added
+
+- Opt-in `<soatable/compute.hpp>` vectorized column operations: single-column span ufuncs
+  (`transform`, `reduce`, `inclusive_scan`, `count_if`), policy-agnostic table helpers
+  (`transform_column`, `reduce_column`, `count_column_if`) over `column_tiles<T>()`, and cross-column
+  row-wise `assign_from<Out, In...>()` for expressions like `pnl = price * qty` (B.1).
 
 - `column<T>()` (and a `const` overload) returning a `std::span` over a column's dense values, plus
   `row_indices<T>()` and `make_row_id()` to map dense positions back to stable handles (A.1).
