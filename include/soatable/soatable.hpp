@@ -30,6 +30,28 @@
 #define SOATABLE_HAS_PRINT 0
 #endif
 
+// Freestanding / no-exceptions mode. Define SOATABLE_NO_EXCEPTIONS to compile without throwing:
+// every internal `throw` is redirected to a terminating handler, and callers use the non-throwing
+// get_expected<T>() / try_get<T>() accessors for error handling. The library uses no RTTI either.
+#ifdef SOATABLE_NO_EXCEPTIONS
+#include <cstdio>
+#include <cstdlib>
+namespace soatable::detail {
+/// @brief Terminating handler invoked in place of a throw under SOATABLE_NO_EXCEPTIONS.
+/// @param message A human-readable description of the failed precondition.
+[[noreturn]] inline void terminate_with(const char* message) noexcept {
+    std::fputs("soatable fatal: ", stderr);
+    std::fputs(message, stderr);
+    std::fputc('\n', stderr);
+    std::abort();
+}
+}  // namespace soatable::detail
+#define SOATABLE_THROW(exception_type, message) ::soatable::detail::terminate_with(message)
+#else
+/// @brief Throw @p exception_type with @p message, or terminate under SOATABLE_NO_EXCEPTIONS.
+#define SOATABLE_THROW(exception_type, message) throw exception_type(message)
+#endif
+
 /// @brief The main namespace for the soa_table library.
 namespace soatable {
 
@@ -173,7 +195,11 @@ struct aligned_allocator {
     /// @return Pointer to the aligned storage.
     [[nodiscard]] T* allocate(std::size_t count) {
         if (count > std::numeric_limits<std::size_t>::max() / sizeof(T)) {
+#ifdef SOATABLE_NO_EXCEPTIONS
+            terminate_with("aligned_allocator: allocation size overflow.");
+#else
             throw std::bad_alloc();
+#endif
         }
         void* ptr = ::operator new(count * sizeof(T), std::align_val_t {Alignment});
         return static_cast<T*>(ptr);
@@ -1092,7 +1118,9 @@ class basic_soa_table {
             m_rows[index].signature.reset();
         } else {
             if (!can_address_rows(m_rows.size() + 1)) {
-                throw std::overflow_error("soa_table exhausted the row_id index space.");
+                SOATABLE_THROW(
+                    std::overflow_error, "soa_table exhausted the row_id index space."
+                );
             }
             m_rows.reserve(m_rows.size() + 1);
             m_free_links.reserve(m_free_links.size() + 1);
@@ -1169,7 +1197,7 @@ class basic_soa_table {
         requires registered_column_v<T>
     T& assign(row_id id, Args&&... args) {
         if (!is_valid(id)) {
-            throw std::out_of_range("assign() called with an invalid row_id.");
+            SOATABLE_THROW(std::out_of_range, "assign() called with an invalid row_id.");
         }
 
         auto& pool  = std::get<column_vector<T, Storage>>(m_columns);
@@ -1242,7 +1270,7 @@ class basic_soa_table {
     T& get(row_id id) {
         auto* value = try_get<T>(id);
         if (value == nullptr) {
-            throw std::out_of_range("Requested column is not available on this row.");
+            SOATABLE_THROW(std::out_of_range, "Requested column is not available on this row.");
         }
         return *value;
     }
@@ -1258,7 +1286,7 @@ class basic_soa_table {
     const T& get(row_id id) const {
         auto* value = try_get<T>(id);
         if (value == nullptr) {
-            throw std::out_of_range("Requested column is not available on this row.");
+            SOATABLE_THROW(std::out_of_range, "Requested column is not available on this row.");
         }
         return *value;
     }
@@ -1837,7 +1865,7 @@ struct row_handle {
     /// @brief Ensure the table is bound.
     [[nodiscard]] soa_table<RegisteredColumns...>& require_table() {
         if (table == nullptr) {
-            throw std::logic_error("row_handle is not bound to a table.");
+            SOATABLE_THROW(std::logic_error, "row_handle is not bound to a table.");
         }
         return *table;
     }
@@ -1845,7 +1873,7 @@ struct row_handle {
     /// @brief Ensure the table is bound (const).
     [[nodiscard]] const soa_table<RegisteredColumns...>& require_table() const {
         if (table == nullptr) {
-            throw std::logic_error("row_handle is not bound to a table.");
+            SOATABLE_THROW(std::logic_error, "row_handle is not bound to a table.");
         }
         return *table;
     }
@@ -1984,3 +2012,5 @@ struct tuple_element<Index, soatable::row_view<Cols...>> {
 };
 
 }  // namespace std
+
+#undef SOATABLE_THROW

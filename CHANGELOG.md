@@ -23,6 +23,9 @@ Foundational layout primitives (FEATURES Phase A) and the start of the compute l
 - Allocator-aware columns: `soa_layout_with<Allocator>` storage policy and `custom_soa_table<Allocator,
   Columns...>` let columns use a caller-supplied allocator; opt-in `<soatable/pmr.hpp>` adds
   `pmr_soa_table` backed by the active `std::pmr` memory resource (C.2).
+- Freestanding / no-exceptions mode: define `SOATABLE_NO_EXCEPTIONS` to redirect every internal
+  `throw` to a terminating handler and use the non-throwing `get_expected<T>()` / `try_get<T>()`
+  accessors; the library uses no RTTI. A CI gate builds this mode with `-fno-exceptions` (C.3).
 
 - `column<T>()` (and a `const` overload) returning a `std::span` over a column's dense values, plus
   `row_indices<T>()` and `make_row_id()` to map dense positions back to stable handles (A.1).

@@ -72,6 +72,7 @@ In our benchmarks, SoaTable's `select` queries are often **5x to 15x faster** th
 - **Vectorized Compute:** opt-in `<soatable/compute.hpp>` provides `transform` / `reduce` / `inclusive_scan` / `count_if` over column spans, policy-agnostic `transform_column` / `reduce_column`, and cross-column `assign_from<Out, In...>()` (e.g. `pnl = price * qty`).
 - **Query Helpers:** opt-in `<soatable/query.hpp>` adds `select_where<Cols...>()` predicate filtering and group-by aggregation (`group_sum` / `group_count` / `group_reduce`).
 - **Custom Allocators:** `custom_soa_table<Allocator, ...>` plugs in any allocator; opt-in `<soatable/pmr.hpp>` `pmr_soa_table` routes column storage through a `std::pmr` arena / monotonic / pool resource.
+- **Freestanding / No-Exceptions:** define `SOATABLE_NO_EXCEPTIONS` to build without throwing (and without RTTI) for embedded / flight / kernel contexts, using `get_expected<T>()` for error handling.
 
 ### Naming
 

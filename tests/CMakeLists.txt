@@ -64,6 +64,15 @@ add_executable(soatable_warning_check warning_check.cpp)
 target_link_libraries(soatable_warning_check PRIVATE soatable::soatable)
 soatable_apply_strict_warnings(soatable_warning_check TRUE)
 
+# --- Freestanding / no-exceptions build gate --------------------------------------------------
+add_executable(soatable_no_exceptions_check no_exceptions_check.cpp)
+target_link_libraries(soatable_no_exceptions_check PRIVATE soatable::soatable)
+target_compile_definitions(soatable_no_exceptions_check PRIVATE SOATABLE_NO_EXCEPTIONS)
+if(NOT MSVC)
+    target_compile_options(soatable_no_exceptions_check PRIVATE -fno-exceptions)
+endif()
+add_test(NAME no_exceptions_check COMMAND soatable_no_exceptions_check)
+
 # --- Compile-fail tests: each target must fail to build (negative compile-time contracts) ------
 set(SOATABLE_COMPILE_FAIL_CASES
     duplicate_columns
