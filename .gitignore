@@ -11,3 +11,4 @@ prompts.txt
 # Generated artifacts
 dist/
 bench/
+dist/

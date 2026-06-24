@@ -15,6 +15,8 @@ Foundational layout primitives (FEATURES Phase A) and the start of the compute l
   (`transform`, `reduce`, `inclusive_scan`, `count_if`), policy-agnostic table helpers
   (`transform_column`, `reduce_column`, `count_column_if`) over `column_tiles<T>()`, and cross-column
   row-wise `assign_from<Out, In...>()` for expressions like `pnl = price * qty` (B.1).
+- Opt-in `<soatable/query.hpp>` query helpers: `select_where<Cols...>()` predicate filtering over the
+  smallest-driver scan, and group-by aggregation (`group_reduce` / `group_sum` / `group_count`) (B.2).
 
 - `column<T>()` (and a `const` overload) returning a `std::span` over a column's dense values, plus
   `row_indices<T>()` and `make_row_id()` to map dense positions back to stable handles (A.1).
