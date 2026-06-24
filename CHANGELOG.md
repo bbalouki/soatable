@@ -26,6 +26,9 @@ Foundational layout primitives (FEATURES Phase A) and the start of the compute l
 - Freestanding / no-exceptions mode: define `SOATABLE_NO_EXCEPTIONS` to redirect every internal
   `throw` to a terminating handler and use the non-throwing `get_expected<T>()` / `try_get<T>()`
   accessors; the library uses no RTTI. A CI gate builds this mode with `-fno-exceptions` (C.3).
+- Reflection path scaffolding in `<soatable/reflect.hpp>`: `table_for<Struct>` built from a
+  `columns_of<Struct>` mapping, usable today via a one-line `column_list` specialization and gated by
+  `SOATABLE_HAS_REFLECTION` to auto-derive columns once C++26 reflection ships (C.4).
 
 - `column<T>()` (and a `const` overload) returning a `std::span` over a column's dense values, plus
   `row_indices<T>()` and `make_row_id()` to map dense positions back to stable handles (A.1).
