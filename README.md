@@ -2,7 +2,7 @@
 
 [![Build](https://github.com/bbalouki/soatable/actions/workflows/ci.yaml/badge.svg)](https://github.com/bbalouki/soatable/actions/workflows/ci.yaml)
 ![C++](https://img.shields.io/badge/C%2B%2B-23-blue.svg)
-![CMake](https://img.shields.io/badge/CMake-3.20%2B-green.svg)
+![CMake](https://img.shields.io/badge/CMake-3.25%2B-green.svg)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Header-only](https://img.shields.io/badge/Header--only-Yes-blue)
 ![Dependencies](https://img.shields.io/badge/Dependencies-None-brightgreen)
@@ -181,18 +181,57 @@ int main() {
 
 ## Installation
 
+SoaTable is header-only and requires a C++23 compiler and CMake 3.25+.
+
 ### CMake
 
-Add the repository as a subdirectory or install it:
+Consume an installed package or add the repository as a subdirectory:
 
 ```cmake
 find_package(soatable CONFIG REQUIRED)
 target_link_libraries(your_target PRIVATE soatable::soatable)
 ```
 
+The repository ships `CMakePresets.json`. To build and test locally:
+
+```sh
+cmake --preset clang      # or: gcc, msvc
+cmake --build --preset clang
+ctest --preset clang
+```
+
+### Conan
+
+A header-only recipe is provided at the repository root:
+
+```sh
+conan create .
+```
+
 ### vcpkg
 
-SoaTable is designed to be easily integrated into vcpkg. You can add it to your `vcpkg.json` once published or use it as an overlay.
+Use the overlay port under `packaging/vcpkg/ports`:
+
+```sh
+vcpkg install soatable --overlay-ports=packaging/vcpkg/ports
+```
+
+### Single-header drop-in
+
+SoaTable is already a single header. To generate a stamped, self-contained copy:
+
+```sh
+python scripts/amalgamate.py   # writes dist/soatable.hpp
+```
+
+### Documentation
+
+API reference is published to GitHub Pages from the `main` branch. Build it locally with:
+
+```sh
+cmake -S . -B build-docs -DSOATABLE_BUILD_DOCUMENTATION=ON
+cmake --build build-docs --target docs
+```
 
 ## Benchmarks
 

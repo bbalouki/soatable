@@ -1,0 +1,135 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "SOATABLE_BUILD_TESTS": "ON",
+        "SOATABLE_BUILD_EXAMPLES": "ON",
+        "SOATABLE_BUILD_BENCHMARKS": "OFF"
+      }
+    },
+    {
+      "name": "debug",
+      "inherits": "base",
+      "displayName": "Debug",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "release",
+      "inherits": "base",
+      "displayName": "Release",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "gcc",
+      "inherits": "release",
+      "displayName": "GCC Release",
+      "cacheVariables": { "CMAKE_CXX_COMPILER": "g++" }
+    },
+    {
+      "name": "clang",
+      "inherits": "release",
+      "displayName": "Clang Release",
+      "cacheVariables": { "CMAKE_CXX_COMPILER": "clang++" }
+    },
+    {
+      "name": "msvc",
+      "inherits": "base",
+      "displayName": "MSVC (multi-config)",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "asan-ubsan",
+      "inherits": "debug",
+      "displayName": "Clang Address + UB Sanitizers",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer"
+      }
+    },
+    {
+      "name": "bench",
+      "inherits": "release",
+      "displayName": "Benchmarks",
+      "cacheVariables": {
+        "SOATABLE_BUILD_BENCHMARKS": "ON",
+        "SOATABLE_BUILD_TESTS": "OFF",
+        "SOATABLE_BUILD_EXAMPLES": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "debug", "configurePreset": "debug", "configuration": "Debug" },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "configuration": "Release"
+    },
+    { "name": "gcc", "configurePreset": "gcc", "configuration": "Release" },
+    { "name": "clang", "configurePreset": "clang", "configuration": "Release" },
+    { "name": "msvc", "configurePreset": "msvc", "configuration": "Release" },
+    {
+      "name": "asan-ubsan",
+      "configurePreset": "asan-ubsan",
+      "configuration": "Debug"
+    },
+    { "name": "bench", "configurePreset": "bench", "configuration": "Release" }
+  ],
+  "testPresets": [
+    {
+      "name": "common",
+      "hidden": true,
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error", "stopOnFailure": false }
+    },
+    {
+      "name": "debug",
+      "inherits": "common",
+      "configurePreset": "debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "release",
+      "inherits": "common",
+      "configurePreset": "release",
+      "configuration": "Release"
+    },
+    {
+      "name": "gcc",
+      "inherits": "common",
+      "configurePreset": "gcc",
+      "configuration": "Release"
+    },
+    {
+      "name": "clang",
+      "inherits": "common",
+      "configurePreset": "clang",
+      "configuration": "Release"
+    },
+    {
+      "name": "msvc",
+      "inherits": "common",
+      "configurePreset": "msvc",
+      "configuration": "Release"
+    },
+    {
+      "name": "asan-ubsan",
+      "inherits": "common",
+      "configurePreset": "asan-ubsan",
+      "configuration": "Debug"
+    }
+  ]
+}

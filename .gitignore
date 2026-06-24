@@ -1,9 +1,13 @@
 .venv/
 .env
 build/
+build-docs/
 install/
 .cache/
 CMakeUserPresets.json
 *-workspace
 /.vscode/*.json
 prompts.txt
+# Generated artifacts
+dist/
+bench/

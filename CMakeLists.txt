@@ -1,6 +1,6 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.25)
 
-project(SOATABLE VERSION 0.1.0 LANGUAGES CXX)
+project(SOATABLE VERSION 0.3.0 LANGUAGES CXX)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON) 
 
@@ -61,4 +61,8 @@ endif()
 if(SOATABLE_BUILD_TESTS AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tests)
   enable_testing()
   add_subdirectory(tests)
+endif()
+
+if(SOATABLE_BUILD_DOCUMENTATION)
+  build_documenation()
 endif()

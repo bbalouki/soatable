@@ -1,0 +1,45 @@
+name: Docs
+
+on:
+  push:
+    branches: [ main ]
+
+# Allow one concurrent deployment.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Doxygen
+      run: sudo apt-get update && sudo apt-get install -y doxygen
+
+    - name: Generate API documentation
+      run: |
+        cmake -S . -B build-docs \
+          -DSOATABLE_BUILD_DOCUMENTATION=ON \
+          -DSOATABLE_BUILD_TESTS=OFF \
+          -DSOATABLE_BUILD_EXAMPLES=OFF \
+          -DSOATABLE_BUILD_BENCHMARKS=OFF
+        cmake --build build-docs --target docs
+
+    - name: Upload Pages artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: build-docs/doxygen/html
+
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4

@@ -17,23 +17,26 @@ jobs:
           - {
               name: "Ubuntu GCC 13",
               os: ubuntu-latest,
-              cxx: g++-13
+              cxx: g++-13,
+              preset: gcc
             }
           - {
               name: "Ubuntu Clang 18",
               os: ubuntu-latest,
-              cxx: clang++-18
+              cxx: clang++-18,
+              preset: clang
             }
           - {
               name: "Ubuntu Clang 18 (ASan+UBSan)",
               os: ubuntu-latest,
               cxx: clang++-18,
-              sanitizers: true
+              preset: asan-ubsan
             }
           - {
               name: "Windows MSVC",
               os: windows-latest,
-              cxx: cl
+              cxx: cl,
+              preset: msvc
             }
 
     steps:
@@ -54,27 +57,23 @@ jobs:
 
     - name: Configure CMake
       run: |
-        if [ "${{ matrix.config.os }}" = "windows-latest" ]; then
-          cmake -B build -DSOATABLE_BUILD_TESTS=ON -DSOATABLE_BUILD_EXAMPLES=ON
-        elif [ "${{ matrix.config.sanitizers }}" = "true" ]; then
-          # AddressSanitizer + UndefinedBehaviorSanitizer; -fno-sanitize-recover makes UBSan abort
-          # so any finding fails the build. Benchmarks are excluded to keep the leg focused.
-          cmake -B build -DSOATABLE_BUILD_TESTS=ON -DSOATABLE_BUILD_EXAMPLES=ON -DSOATABLE_BUILD_BENCHMARKS=OFF \
-            -DCMAKE_CXX_COMPILER=${{ matrix.config.cxx }} \
-            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer"
+        # Linux legs pin the exact compiler version on top of the generic preset; Windows uses the
+        # multi-config MSVC preset as-is.
+        if [ "${{ runner.os }}" = "Windows" ]; then
+          cmake --preset ${{ matrix.config.preset }}
         else
-          cmake -B build -DSOATABLE_BUILD_TESTS=ON -DSOATABLE_BUILD_EXAMPLES=ON -DCMAKE_CXX_COMPILER=${{ matrix.config.cxx }}
+          cmake --preset ${{ matrix.config.preset }} -DCMAKE_CXX_COMPILER=${{ matrix.config.cxx }}
         fi
       shell: bash
 
     - name: Build
-      run: cmake --build build --config Release
+      run: cmake --build --preset ${{ matrix.config.preset }}
+      shell: bash
 
     - name: Run Tests
       run: |
-        cd build
         # Treat any sanitizer finding as a hard failure.
         export ASAN_OPTIONS=halt_on_error=1:abort_on_error=1
         export UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1
-        ctest -C Release --output-on-failure
+        ctest --preset ${{ matrix.config.preset }}
       shell: bash
