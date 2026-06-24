@@ -48,6 +48,7 @@ set(SOATABLE_UNIT_TEST_SOURCES
     unittests/reflect_test.cpp
     unittests/concurrent_test.cpp
     unittests/mmap_test.cpp
+    unittests/timeseries_test.cpp
     unittests/const_correctness_test.cpp
     unittests/deprecated_alias_test.cpp
     unittests/include_hygiene_test.cpp

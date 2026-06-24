@@ -38,6 +38,11 @@ Foundational layout primitives (FEATURES Phase A) and the start of the compute l
 - Memory-mapped columns: opt-in `<soatable/mmap.hpp>` `mmap_soa_table` backs columns with
   page-granular, demand-paged virtual memory (`mmap` / `VirtualAlloc`) so a column can exceed the
   resident set; mappings are page-aligned and SIMD-friendly (D.3).
+- Domain cookbooks: four worked, runnable examples under `example/cookbook/` (finance tick store,
+  game/ECS world, aerospace telemetry, scientific table), linked from the README (E.1).
+- Time-series helpers in `<soatable/timeseries.hpp>`: `rolling_sum` / `rolling_mean` / `deltas` over
+  column spans, `rolling_mean_column` with a projection, and `for_each_dirty` dirty-region scans for
+  incremental recompute (E.4).
 
 - `column<T>()` (and a `const` overload) returning a `std::span` over a column's dense values, plus
   `row_indices<T>()` and `make_row_id()` to map dense positions back to stable handles (A.1).
