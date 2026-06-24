@@ -18,6 +18,9 @@ Foundational layout primitives (FEATURES Phase A).
 - Opt-in `<soatable/serialize.hpp>` with `save()` / `load()`: a versioned, schema-checked binary
   snapshot for trivially-copyable columns that round-trips handles, generations, and column order
   (A.4).
+- SIMD-aligned column storage: dense column data is over-aligned to `simd_alignment` (64 bytes,
+  matching Apache Arrow) via an internal aligned allocator, so `column<T>()` spans are ready for
+  aligned SIMD loads (A.2, alignment half). The optional AoSoA tiled layout remains pending.
 
 ## [0.3.0] - 2026-06-24
 

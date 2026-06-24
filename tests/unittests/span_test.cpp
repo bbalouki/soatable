@@ -82,6 +82,19 @@ TEST(SpanTest, ConstTableYieldsConstSpan) {
     EXPECT_EQ(ages[0].value, 7);
 }
 
+TEST(SpanTest, ColumnStorageIsSimdOverAligned) {
+    // A.2: column storage is over-aligned (Arrow's 64-byte recommendation) for aligned SIMD loads.
+    DemoTable table;
+    for (int i = 0; i < 100; ++i) {
+        const auto id = table.insert();
+        table.assign<Age>(id, i);
+    }
+
+    const auto address = reinterpret_cast<std::uintptr_t>(table.column<Age>().data());
+    EXPECT_EQ(address % soatable::simd_alignment, 0U);
+    EXPECT_GE(soatable::simd_alignment, 64U);
+}
+
 TEST(SpanTest, MakeRowIdRejectsDeadIndex) {
     DemoTable table;
     const auto id = table.insert();

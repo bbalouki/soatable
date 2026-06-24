@@ -12,6 +12,7 @@
 #include <functional>
 #include <future>
 #include <limits>
+#include <new>
 #include <optional>
 #include <ranges>
 #include <span>
@@ -121,6 +122,18 @@ struct index_of<T, std::tuple<Types...>> {
     );
 };
 
+/// @brief Default over-alignment (in bytes) for dense column storage.
+///
+/// Columns are over-aligned to this boundary (matching Apache Arrow's 64-byte recommendation) so the
+/// spans returned by soa_table::column<T>() are ready for aligned SIMD loads and cache-line friendly.
+inline constexpr std::size_t simd_alignment = 64;
+
+/// @brief The alignment used for a column of T: the larger of T's natural alignment and simd_alignment.
+/// @tparam T The column value type.
+template <typename T>
+inline constexpr std::size_t column_alignment =
+    (alignof(T) > simd_alignment) ? alignof(T) : simd_alignment;
+
 /// @brief Detail namespace for internal implementation details.
 namespace detail {
 
@@ -129,6 +142,58 @@ namespace detail {
 /// @tparam Columns The table's column types.
 template <typename... Columns>
 struct table_access;
+
+/// @brief A standard-conforming allocator that over-aligns its allocations to Alignment bytes.
+/// @tparam T The allocated value type.
+/// @tparam Alignment The required alignment in bytes (defaults to column_alignment<T>).
+template <typename T, std::size_t Alignment = column_alignment<T>>
+struct aligned_allocator {
+    static_assert(Alignment >= alignof(T), "Alignment must be at least alignof(T).");
+
+    /// @brief The allocated value type.
+    using value_type = T;
+    /// @brief The over-alignment in bytes.
+    static constexpr std::size_t alignment = Alignment;
+
+    /// @brief Rebind helper so container nodes can be allocated with the same alignment policy.
+    template <typename U>
+    struct rebind {
+        using other = aligned_allocator<U, column_alignment<U>>;
+    };
+
+    constexpr aligned_allocator() noexcept = default;
+
+    /// @brief Converting constructor required by the Allocator concept.
+    template <typename U, std::size_t OtherAlignment>
+    constexpr aligned_allocator(const aligned_allocator<U, OtherAlignment>&) noexcept {}
+
+    /// @brief Allocate n over-aligned elements.
+    /// @param count The number of elements.
+    /// @return Pointer to the aligned storage.
+    [[nodiscard]] T* allocate(std::size_t count) {
+        if (count > std::numeric_limits<std::size_t>::max() / sizeof(T)) {
+            throw std::bad_alloc();
+        }
+        void* ptr = ::operator new(count * sizeof(T), std::align_val_t {Alignment});
+        return static_cast<T*>(ptr);
+    }
+
+    /// @brief Release storage obtained from allocate().
+    /// @param ptr The pointer to release.
+    void deallocate(T* ptr, std::size_t) noexcept {
+        ::operator delete(ptr, std::align_val_t {Alignment});
+    }
+
+    template <typename U, std::size_t OtherAlignment>
+    constexpr bool operator==(const aligned_allocator<U, OtherAlignment>&) const noexcept {
+        return Alignment == OtherAlignment;
+    }
+};
+
+/// @brief A vector whose storage is over-aligned to column_alignment<T> for SIMD-friendly columns.
+/// @tparam T The element type.
+template <typename T>
+using aligned_vector = std::vector<T, aligned_allocator<T>>;
 
 /// @brief Generates a mask with the specified number of low bits set.
 /// @tparam UInt The unsigned integer type.
@@ -487,6 +552,8 @@ class column_vector {
     /// Widening this to `std::uint64_t` is the single change required for a 64-bit build; every
     /// internal index derives from it. Kept at 32 bits to match `row_id::index`.
     using size_type = std::uint32_t;
+    /// @brief The dense storage type: a vector over-aligned to column_alignment<T> for SIMD loads.
+    using data_vector = detail::aligned_vector<T>;
 
    private:
     /// @brief Sentinel stored in m_sparse for a row that has no value in this column.
@@ -495,8 +562,8 @@ class column_vector {
     std::vector<size_type> m_sparse;
     /// @brief Maps dense_index -> row_index.
     std::vector<size_type> m_dense;
-    /// @brief The actual data stored densely.
-    std::vector<T> m_data;
+    /// @brief The actual data stored densely (over-aligned for SIMD-friendly column spans).
+    data_vector m_data;
 
    public:
     /// @brief Default constructor.
@@ -625,7 +692,7 @@ class column_vector {
     /// column is left in a valid but unspecified state. The index rebuild after the move loop is
     /// no-throw, so the sparse/dense/data arrays are never left mutually inconsistent.
     void reorder(const std::vector<std::uint32_t>& row_order) {
-        std::vector<T>         new_data;
+        data_vector            new_data;
         std::vector<size_type> new_dense;
         new_data.reserve(m_data.size());
         new_dense.reserve(m_dense.size());
@@ -654,9 +721,9 @@ class column_vector {
     /// @brief Get the list of row indices that have values in this column.
     [[nodiscard]] const std::vector<std::uint32_t>& dense_rows() const { return m_dense; }
     /// @brief Access the raw dense data.
-    std::vector<T>& raw_data() { return m_data; }
+    data_vector& raw_data() { return m_data; }
     /// @brief Access the raw dense data (const).
-    const std::vector<T>& raw_data() const { return m_data; }
+    const data_vector& raw_data() const { return m_data; }
 };
 
 // ===================================
