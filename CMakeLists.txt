@@ -24,6 +24,9 @@ target_include_directories(soatable INTERFACE
 
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
+# Ship the debugger visualizers (MSVC .natvis and GDB pretty-printers) alongside the package.
+install(DIRECTORY tools/visualizers/ DESTINATION ${CMAKE_INSTALL_DATADIR}/soatable/visualizers)
+
 install(TARGETS soatable
   EXPORT soatableTargets
 )

@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MSVC debugger visualizers for SoaTable. Load it in Visual Studio by adding this file to your
+  project/solution, or copy it to %USERPROFILE%\Documents\Visual Studio 2022\Visualizers\.
+  It renders the key types compactly and lets a table expand into its columns and row metadata.
+-->
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+
+  <Type Name="soatable::row_id">
+    <DisplayString>row[{index}] gen={generation}</DisplayString>
+    <Expand>
+      <Item Name="index">index</Item>
+      <Item Name="generation">generation</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="soatable::delta_value&lt;*&gt;">
+    <DisplayString>{m_value}</DisplayString>
+    <Expand>
+      <Item Name="value">m_value</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="soatable::dirty_mask&lt;*&gt;">
+    <DisplayString>mask=0x{m_mask,x}</DisplayString>
+    <Expand>
+      <Item Name="mask">m_mask</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="soatable::quantized_float&lt;*&gt;">
+    <DisplayString>quantized={quantized_value}</DisplayString>
+    <Expand>
+      <Item Name="quantized">quantized_value</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="soatable::bitmap">
+    <DisplayString>{{ bits={m_size} }}</DisplayString>
+    <Expand>
+      <Item Name="[bits]">m_size</Item>
+      <Item Name="words">m_words</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="soatable::column_vector&lt;*&gt;">
+    <DisplayString>{{ present={m_dense} }}</DisplayString>
+    <Expand>
+      <Item Name="[present]">m_dense</Item>
+      <Item Name="data">m_data</Item>
+      <Item Name="rows">m_dense</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="soatable::basic_soa_table&lt;*&gt;">
+    <DisplayString>{{ rows={m_alive_count}, slots={m_rows} }}</DisplayString>
+    <Expand>
+      <Item Name="[alive]">m_alive_count</Item>
+      <Item Name="columns">m_columns</Item>
+      <Item Name="row_meta">m_rows</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="soatable::row_handle&lt;*&gt;">
+    <DisplayString Condition="table == nullptr">unbound</DisplayString>
+    <DisplayString>{id} -&gt; {table}</DisplayString>
+    <Expand>
+      <Item Name="id">id</Item>
+      <Item Name="table">table</Item>
+    </Expand>
+  </Type>
+
+</AutoVisualizer>
