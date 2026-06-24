@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <bit>
 #include <bitset>
 #include <cassert>
 #include <cmath>
@@ -13,6 +14,7 @@
 #include <limits>
 #include <optional>
 #include <ranges>
+#include <span>
 #include <stdexcept>
 #include <thread>
 #include <tuple>
@@ -121,6 +123,12 @@ struct index_of<T, std::tuple<Types...>> {
 
 /// @brief Detail namespace for internal implementation details.
 namespace detail {
+
+/// @brief Friend accessor granting the opt-in <soatable/serialize.hpp> header access to the private
+/// state of a soa_table without widening its public surface. Defined only in that header.
+/// @tparam Columns The table's column types.
+template <typename... Columns>
+struct table_access;
 
 /// @brief Generates a mask with the specified number of low bits set.
 /// @tparam UInt The unsigned integer type.
@@ -391,6 +399,78 @@ class dirty_mask {
 };
 
 // =========================
+// 2b. Validity bitmap
+// =========================
+
+/// @brief A packed bit container for per-row column presence (Arrow-style validity).
+///
+/// Bits are stored little-endian within 64-bit words so the raw words() can be handed to an
+/// Arrow-compatible consumer. Produced by soa_table::validity<T>(); see that method for semantics.
+class bitmap {
+   public:
+    /// @brief The word type backing the bitmap.
+    using word_type = std::uint64_t;
+    /// @brief Number of bits per backing word.
+    static constexpr std::size_t bits_per_word = std::numeric_limits<word_type>::digits;
+
+    /// @brief Construct an all-clear bitmap of the given bit length.
+    /// @param bit_count The number of bits the bitmap addresses.
+    explicit bitmap(std::size_t bit_count)
+        : m_words((bit_count + bits_per_word - 1) / bits_per_word, word_type {0}),
+          m_size(bit_count) {}
+
+    /// @brief Set the bit at the given position.
+    /// @param index The bit position.
+    void set(std::size_t index) {
+        m_words[index / bits_per_word] |= word_type {1} << (index % bits_per_word);
+    }
+
+    /// @brief Test the bit at the given position.
+    /// @param index The bit position.
+    /// @return True if the bit is set, false otherwise.
+    [[nodiscard]] bool test(std::size_t index) const {
+        return (m_words[index / bits_per_word] >> (index % bits_per_word) & word_type {1}) != 0;
+    }
+
+    /// @brief Number of bits the bitmap addresses.
+    [[nodiscard]] std::size_t size() const noexcept { return m_size; }
+
+    /// @brief Number of set bits.
+    [[nodiscard]] std::size_t count() const {
+        std::size_t total = 0;
+        for (const word_type word : m_words) {
+            total += static_cast<std::size_t>(std::popcount(word));
+        }
+        return total;
+    }
+
+    /// @brief The raw backing words (little-endian bit order), suitable for Arrow interchange.
+    [[nodiscard]] std::span<const word_type> words() const noexcept {
+        return std::span<const word_type>(m_words.data(), m_words.size());
+    }
+
+    /// @brief Invoke a callback for each set bit position, in ascending order, branch-free per
+    /// word.
+    /// @tparam Func A callable accepting a std::size_t bit position.
+    /// @param func The callback.
+    template <typename Func>
+    void for_each_set(Func&& func) const {
+        for (std::size_t word_index = 0; word_index < m_words.size(); ++word_index) {
+            word_type remaining = m_words[word_index];
+            while (remaining != 0) {
+                const auto bit = static_cast<std::size_t>(std::countr_zero(remaining));
+                std::invoke(func, word_index * bits_per_word + bit);
+                remaining &= remaining - 1;  // Clear the lowest set bit.
+            }
+        }
+    }
+
+   private:
+    std::vector<word_type> m_words;
+    std::size_t            m_size = 0;
+};
+
+// =========================
 // 3. Sparse column storage
 // =========================
 
@@ -493,8 +573,9 @@ class column_vector {
     /// @param args Arguments to pass to the constructor of T.
     /// @return Reference to the emplaced value.
     /// @note Strong exception guarantee when inserting a new value: the dense storage is grown and
-    /// only committed through the sparse slot once every throwing step has succeeded. Overwriting an
-    /// existing value offers the guarantee of T's assignment (strong for nothrow-assignable types).
+    /// only committed through the sparse slot once every throwing step has succeeded. Overwriting
+    /// an existing value offers the guarantee of T's assignment (strong for nothrow-assignable
+    /// types).
     template <typename... Args>
     T& emplace(std::uint32_t row_index, Args&&... args) {
         if (row_index >= m_sparse.size()) {
@@ -595,7 +676,8 @@ class column_vector {
 ///     row.get<Position>().x += row.get<Velocity>().x;
 /// }
 /// @endcode
-/// A row_view is invalidated by the same operations that invalidate column references (erase, sort).
+/// A row_view is invalidated by the same operations that invalidate column references (erase,
+/// sort).
 template <typename... Cols>
 class row_view {
    public:
@@ -691,13 +773,14 @@ class soa_table {
 
    private:
     static constexpr std::uint32_t npos = std::numeric_limits<std::uint32_t>::max();
-    /// @brief Generation value at which a slot is retired instead of recycled (ABA wraparound bound).
+    /// @brief Generation value at which a slot is retired instead of recycled (ABA wraparound
+    /// bound).
     static constexpr std::uint32_t max_generation = std::numeric_limits<std::uint32_t>::max();
     /// @brief Alive-row count below which sort_by_column_parallel falls back to a serial sort.
     ///
-    /// Below this size the per-column task-launch overhead dominates the work saved, so the parallel
-    /// path is not worthwhile. The crossover is machine dependent; this is a conservative default
-    /// measured to favour the serial path for small tables.
+    /// Below this size the per-column task-launch overhead dominates the work saved, so the
+    /// parallel path is not worthwhile. The crossover is machine dependent; this is a conservative
+    /// default measured to favour the serial path for small tables.
     static constexpr std::size_t parallel_sort_threshold = 4096;
 
     /// @brief Metadata for all row slots.
@@ -710,6 +793,9 @@ class soa_table {
     std::size_t m_alive_count = 0;
     /// @brief Storage for each column.
     std::tuple<column_vector<Columns>...> m_columns;
+
+    /// @brief Grants the opt-in serialization header access to the private state above.
+    friend struct detail::table_access<Columns...>;
 
     /// @brief Internal check for index overflow.
     [[nodiscard]] static constexpr bool can_address_rows(std::size_t count) {
@@ -829,11 +915,12 @@ class soa_table {
     /// @brief Erase a row by ID.
     /// @param id The row_id of the row to erase.
     /// @note Basic exception guarantee: column element removal relies on T's move assignment, which
-    /// may throw for non-nothrow-movable types, leaving the table valid but in an unspecified state.
-    /// @note ABA safety: a slot's generation defeats stale handles for up to 2^32 erase/reuse cycles.
-    /// When that counter would wrap, the slot is retired (never recycled) so a saturated stale handle
-    /// can never alias a freshly inserted row. Retiring leaks one slot, which is acceptable given the
-    /// cycle count required to reach it.
+    /// may throw for non-nothrow-movable types, leaving the table valid but in an unspecified
+    /// state.
+    /// @note ABA safety: a slot's generation defeats stale handles for up to 2^32 erase/reuse
+    /// cycles. When that counter would wrap, the slot is retired (never recycled) so a saturated
+    /// stale handle can never alias a freshly inserted row. Retiring leaks one slot, which is
+    /// acceptable given the cycle count required to reach it.
     void erase(row_id id) {
         if (!is_valid(id)) {
             return;
@@ -869,8 +956,9 @@ class soa_table {
     /// @param id The row_id of the row.
     /// @param args Arguments to pass to the constructor of T.
     /// @return Reference to the assigned value.
-    /// @note Strong exception guarantee when adding a new column value (delegates to the strong path
-    /// of column_vector::emplace); overwriting an existing value inherits T's assignment guarantee.
+    /// @note Strong exception guarantee when adding a new column value (delegates to the strong
+    /// path of column_vector::emplace); overwriting an existing value inherits T's assignment
+    /// guarantee.
     /// @throws std::out_of_range If the row_id is invalid (thrown before any mutation).
     template <typename T, typename... Args>
         requires registered_column_v<T>
@@ -1196,6 +1284,72 @@ class soa_table {
                });
     }
 
+    /// @brief Zero-copy view of a column's dense values as a contiguous span.
+    /// @tparam T The column type.
+    /// @return A span over the column's packed values, ready to hand to BLAS / a SIMD kernel /
+    /// numpy.
+    /// @note The span covers only rows that currently have the column, in dense storage order; pair
+    /// it with row_indices<T>() to recover each value's row. Any operation that adds, removes, or
+    /// reorders the column (assign, unassign, erase, sort, clear, reserve) invalidates the span.
+    template <typename T>
+        requires registered_column_v<T>
+    [[nodiscard]] std::span<T> column() {
+        auto& data = std::get<column_vector<T>>(m_columns).raw_data();
+        return std::span<T>(data.data(), data.size());
+    }
+
+    /// @brief Const zero-copy view of a column's dense values.
+    /// @tparam T The column type.
+    /// @return A span over the column's packed const values.
+    template <typename T>
+        requires registered_column_v<T>
+    [[nodiscard]] std::span<const T> column() const {
+        const auto& data = std::get<column_vector<T>>(m_columns).raw_data();
+        return std::span<const T>(data.data(), data.size());
+    }
+
+    /// @brief Row indices parallel to column<T>(), mapping each dense value back to its row.
+    /// @tparam T The column type.
+    /// @return A span where element i is the internal row index of column<T>()[i].
+    /// @note Combine an index with make_row_id() to obtain a stable handle. Invalidated by the same
+    /// operations as column<T>().
+    template <typename T>
+        requires registered_column_v<T>
+    [[nodiscard]] std::span<const std::uint32_t> row_indices() const {
+        const auto& dense = std::get<column_vector<T>>(m_columns).dense_rows();
+        return std::span<const std::uint32_t>(dense.data(), dense.size());
+    }
+
+    /// @brief Recover a stable handle from an internal row index (e.g. from row_indices<T>()).
+    /// @param row_index The internal row index.
+    /// @return The row_id for that slot, or an invalid handle if the index is out of range or dead.
+    [[nodiscard]] row_id make_row_id(std::uint32_t row_index) const noexcept {
+        if (row_index >= m_rows.size() || !m_rows[row_index].alive) {
+            return row_id {npos, 0};
+        }
+        return row_id {row_index, m_rows[row_index].generation};
+    }
+
+    /// @brief Arrow-style validity bitmap of a column over the row-slot space.
+    /// @tparam T The column type.
+    /// @return A bitmap of length row_slots() where bit i is set iff slot i is alive and has T.
+    /// @note Indexed by internal row index (row_id::index), so it composes with make_row_id() and
+    /// the raw word view feeds branchless masked iteration or Arrow interchange. Rebuilt on each
+    /// call.
+    template <typename T>
+        requires registered_column_v<T>
+    [[nodiscard]] bitmap validity() const {
+        constexpr std::size_t column_index = index_of<T, std::tuple<Columns...>>::value;
+        bitmap                mask(m_rows.size());
+        for (std::size_t row_index = 0; row_index < m_rows.size(); ++row_index) {
+            const auto& meta = m_rows[row_index];
+            if (meta.alive && meta.signature.test(column_index)) {
+                mask.set(row_index);
+            }
+        }
+        return mask;
+    }
+
     /// @brief Fast batch insertion of multiple rows.
     /// @param count The number of rows to insert.
     /// @return A vector of newly created row_ids.
@@ -1231,8 +1385,9 @@ class soa_table {
     /// criteria.
     /// @tparam SortCriteria The types of the comparison criteria.
     /// @param criteria The comparison criteria. Each should be a pair of (ColumnType, Comparator).
-    /// @note Basic exception guarantee: each column is reordered in turn (see column_vector::reorder),
-    /// so a throwing element move leaves the table valid but only partially reordered.
+    /// @note Basic exception guarantee: each column is reordered in turn (see
+    /// column_vector::reorder), so a throwing element move leaves the table valid but only
+    /// partially reordered.
     template <typename... SortCriteria>
     void sort_by_multi(SortCriteria&&... criteria) {
         // Find smallest driver if possible, otherwise use all alive rows
@@ -1315,22 +1470,24 @@ class soa_table {
     /// @tparam T The type of the column to sort by.
     /// @tparam Compare The type of the comparator.
     /// @param comp The comparator to use for sorting values of type T.
-    /// @note Threading model: the row order is computed once on the calling thread, then each column
-    /// is reordered independently (columns are the unit of parallelism). The calling thread reorders
-    /// the last column itself while @c column_count-1 std::async tasks handle the rest, so the caller
-    /// is never idle. It falls back to a serial sort when there is a single column, a single hardware
-    /// thread, or fewer than @ref parallel_sort_threshold alive rows, where task-launch overhead
-    /// would dominate. A persistent thread pool is deliberately avoided: soa_table is a value-semantic
-    /// container, and owning worker threads would complicate its copy/move/lifetime semantics.
-    /// @note Basic exception guarantee. An exception thrown while reordering a column is rethrown by
-    /// future::get after all tasks join, leaving the table valid but partially reordered.
+    /// @note Threading model: the row order is computed once on the calling thread, then each
+    /// column is reordered independently (columns are the unit of parallelism). The calling thread
+    /// reorders the last column itself while @c column_count-1 std::async tasks handle the rest, so
+    /// the caller is never idle. It falls back to a serial sort when there is a single column, a
+    /// single hardware thread, or fewer than @ref parallel_sort_threshold alive rows, where
+    /// task-launch overhead would dominate. A persistent thread pool is deliberately avoided:
+    /// soa_table is a value-semantic container, and owning worker threads would complicate its
+    /// copy/move/lifetime semantics.
+    /// @note Basic exception guarantee. An exception thrown while reordering a column is rethrown
+    /// by future::get after all tasks join, leaving the table valid but partially reordered.
     template <typename T, typename Compare>
         requires registered_column_v<T>
     void sort_by_column_parallel(Compare&& comp) {
         if constexpr (column_count <= 1) {
             sort_by_column<T>(std::forward<Compare>(comp));
         } else {
-            if (m_alive_count < parallel_sort_threshold || std::thread::hardware_concurrency() <= 1) {
+            if (m_alive_count < parallel_sort_threshold ||
+                std::thread::hardware_concurrency() <= 1) {
                 sort_by_column<T>(std::forward<Compare>(comp));
                 return;
             }
@@ -1340,8 +1497,7 @@ class soa_table {
 
             std::vector<std::uint32_t> sorted_rows = dense;
             std::sort(
-                sorted_rows.begin(), sorted_rows.end(),
-                [&](std::uint32_t a, std::uint32_t b) {
+                sorted_rows.begin(), sorted_rows.end(), [&](std::uint32_t a, std::uint32_t b) {
                     return std::invoke(comp, pool.get(a), pool.get(b));
                 }
             );
@@ -1370,8 +1526,7 @@ class soa_table {
                             }
                             ++column_index;
                         }(),
-                        ...
-                    );
+                        ...);
                 },
                 m_columns
             );

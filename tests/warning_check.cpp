@@ -28,6 +28,11 @@ int main() {
         total += found->get().value;
     }
 
+    for (const Position& position : table.column<Position>()) {
+        total += position.value;
+    }
+    total += static_cast<double>(table.row_indices<Position>().size());
+
     table.sort_by_column<Position>(
         [](const Position& lhs, const Position& rhs) { return lhs.value < rhs.value; }
     );

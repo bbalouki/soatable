@@ -65,6 +65,9 @@ In our benchmarks, SoaTable's `select` queries are often **5x to 15x faster** th
 - **Data Compression Utilities:** Includes `quantized_float`, `packed_bits`, and `delta_value` for compact storage.
 - **Reference-Semantic Row Views:** `view<A, B>()` yields `row_view` proxies so structured bindings give real references (`for (auto [id, a, b] : table.view<A, B>()) a.x += b.y;`) without `.get()`.
 - **Non-Throwing Accessors:** `get_expected<T>()` returns `std::expected<std::reference_wrapper<T>, access_error>` for hot paths and no-exceptions builds, alongside throwing `get<T>()` and nullable `try_get<T>()`.
+- **Zero-Copy Column Spans:** `column<T>()` hands a column's dense values to BLAS / a SIMD kernel / numpy with no copy; `row_indices<T>()` maps them back to handles.
+- **Validity Bitmaps:** `validity<T>()` produces an Arrow-style packed presence bitmap for branchless masked iteration and interchange.
+- **Serialization:** opt-in `<soatable/serialize.hpp>` `save()` / `load()` snapshot trivially-copyable tables to a versioned, schema-checked byte buffer.
 
 ### Naming
 

@@ -5,6 +5,20 @@ All notable changes to SoaTable are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Foundational layout primitives (FEATURES Phase A).
+
+### Added
+
+- `column<T>()` (and a `const` overload) returning a `std::span` over a column's dense values, plus
+  `row_indices<T>()` and `make_row_id()` to map dense positions back to stable handles (A.1).
+- `validity<T>()` returning an Arrow-style packed `bitmap` of per-row column presence, with
+  `for_each_set` for branchless masked iteration (A.3).
+- Opt-in `<soatable/serialize.hpp>` with `save()` / `load()`: a versioned, schema-checked binary
+  snapshot for trivially-copyable columns that round-trips handles, generations, and column order
+  (A.4).
+
 ## [0.3.0] - 2026-06-24
 
 API ergonomics and a deliberate naming migration (IMPROVEMENTS Phase 2).
