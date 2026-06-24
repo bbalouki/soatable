@@ -12,8 +12,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <future>
 #include <numeric>
 #include <span>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -208,6 +210,63 @@ template <typename T, typename Storage, typename... Columns, typename Pred, type
 void transform_column_if(basic_soa_table<Storage, Columns...>& table, Pred pred, UnaryOp op) {
     for (std::span<T> tile : table.template column_tiles<T>()) {
         compute::transform_if(tile, pred, op);
+    }
+}
+
+// =========================
+// Chunk-wise iteration and parallelism
+// =========================
+
+/// @brief Number of elements below which chunk-parallel ops run serially (task-launch crossover).
+inline constexpr std::size_t parallel_compute_threshold = 1U << 14;
+
+/// @brief Invoke a callback for each storage chunk of a column.
+/// @tparam T The column type.
+/// @param table The table.
+/// @param func A callable taking a std::span<T> over one chunk.
+/// @note A single whole-column span for soa_layout; one span per tile for aosoa_layout. The hook for
+/// custom per-chunk kernels.
+template <typename T, typename Storage, typename... Columns, typename Func>
+void for_each_chunk(basic_soa_table<Storage, Columns...>& table, Func func) {
+    for (std::span<T> chunk : table.template column_tiles<T>()) {
+        func(chunk);
+    }
+}
+
+/// @brief Transform a column in place, dispatching its chunks across threads when large enough.
+/// @tparam T The column type.
+/// @param table The table.
+/// @param op A callable mapping each value to its new value.
+/// @note Falls back to a serial transform below parallel_compute_threshold elements, with a single
+/// chunk, or on a single hardware thread. Chunks are disjoint, so reordering carries no data race.
+template <typename T, typename Storage, typename... Columns, typename UnaryOp>
+void transform_column_parallel(basic_soa_table<Storage, Columns...>& table, UnaryOp op) {
+    std::vector<std::span<T>> chunks = table.template column_tiles<T>();
+
+    std::size_t total = 0;
+    for (const std::span<T>& chunk : chunks) {
+        total += chunk.size();
+    }
+
+    if (chunks.size() <= 1 || total < parallel_compute_threshold ||
+        std::thread::hardware_concurrency() <= 1) {
+        for (std::span<T> chunk : chunks) {
+            compute::transform(chunk, op);
+        }
+        return;
+    }
+
+    // Dispatch all but the first chunk to async tasks; the caller transforms the first concurrently.
+    std::vector<std::future<void>> futures;
+    futures.reserve(chunks.size() - 1);
+    for (std::size_t i = 1; i < chunks.size(); ++i) {
+        futures.push_back(std::async(std::launch::async, [chunk = chunks[i], op]() mutable {
+            compute::transform(chunk, op);
+        }));
+    }
+    compute::transform(chunks[0], op);
+    for (std::future<void>& future : futures) {
+        future.get();
     }
 }
 

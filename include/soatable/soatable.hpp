@@ -1841,6 +1841,16 @@ using aosoa_table = basic_soa_table<aosoa_layout<TileSize>, Columns...>;
 template <template <typename> class Allocator, typename... Columns>
 using custom_soa_table = basic_soa_table<soa_layout_with<Allocator>, Columns...>;
 
+/// @brief A table whose columns are stored as fixed-size chunks (Arrow-style record batches).
+/// @tparam ChunkSize The number of elements per chunk.
+/// @tparam Columns The unique column types.
+///
+/// An alias for the tiled storage policy: each column is a sequence of fixed-size, over-aligned
+/// chunks, so growth never copies existing chunks and chunks are the natural unit for streaming and
+/// per-chunk parallelism. Access chunks with column_tiles<T>().
+template <std::size_t ChunkSize, typename... Columns>
+using chunked_soa_table = basic_soa_table<aosoa_layout<ChunkSize>, Columns...>;
+
 // =====================
 // 5. Row handle helper
 // =====================

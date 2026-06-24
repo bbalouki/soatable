@@ -73,6 +73,44 @@ TEST(ComputeTest, ColumnOpsWorkOnTiledStorage) {
     EXPECT_EQ(big, 5U);  // doubled values 10,12,14,16,18
 }
 
+TEST(ComputeTest, TransformColumnParallelMatchesSerial) {
+    // Exceed parallel_compute_threshold so the concurrent chunk path runs.
+    soatable::chunked_soa_table<1024, Qty> chunked;
+    constexpr int row_count = 40000;
+    for (int i = 0; i < row_count; ++i) {
+        const auto id = chunked.insert();
+        chunked.assign<Qty>(id, Qty {i});
+    }
+    soatable::compute::transform_column_parallel<Qty>(chunked, [](Qty q) {
+        return Qty {q.value + 1};
+    });
+
+    long long sum = 0;
+    for (const auto chunk : chunked.column_tiles<Qty>()) {
+        for (const Qty& q : chunk) {
+            sum += q.value;
+        }
+    }
+    // Each of row_count values incremented by 1: sum = (0+...+(N-1)) + N.
+    const long long base = static_cast<long long>(row_count) * (row_count - 1) / 2;
+    EXPECT_EQ(sum, base + row_count);
+}
+
+TEST(ComputeTest, ForEachChunkVisitsEveryValue) {
+    soatable::chunked_soa_table<8, Qty> chunked;
+    for (int i = 0; i < 20; ++i) {
+        const auto id = chunked.insert();
+        chunked.assign<Qty>(id, Qty {1});
+    }
+    int total = 0;
+    soatable::compute::for_each_chunk<Qty>(chunked, [&](std::span<Qty> chunk) {
+        for (const Qty& q : chunk) {
+            total += q.value;
+        }
+    });
+    EXPECT_EQ(total, 20);
+}
+
 TEST(ComputeTest, AssignFromComputesCrossColumn) {
     Book book;
     for (int i = 1; i <= 4; ++i) {

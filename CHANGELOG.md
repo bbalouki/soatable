@@ -29,6 +29,9 @@ Foundational layout primitives (FEATURES Phase A) and the start of the compute l
 - Reflection path scaffolding in `<soatable/reflect.hpp>`: `table_for<Struct>` built from a
   `columns_of<Struct>` mapping, usable today via a one-line `column_list` specialization and gated by
   `SOATABLE_HAS_REFLECTION` to auto-derive columns once C++26 reflection ships (C.4).
+- Chunked column storage: the `chunked_soa_table<ChunkSize, Columns...>` alias frames the tiled
+  storage policy as Arrow-style record batches, plus `compute::for_each_chunk` and
+  `compute::transform_column_parallel` for per-chunk iteration and parallelism (D.2).
 
 - `column<T>()` (and a `const` overload) returning a `std::span` over a column's dense values, plus
   `row_indices<T>()` and `make_row_id()` to map dense positions back to stable handles (A.1).
