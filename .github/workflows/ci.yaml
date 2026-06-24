@@ -25,6 +25,12 @@ jobs:
               cxx: clang++-18
             }
           - {
+              name: "Ubuntu Clang 18 (ASan+UBSan)",
+              os: ubuntu-latest,
+              cxx: clang++-18,
+              sanitizers: true
+            }
+          - {
               name: "Windows MSVC",
               os: windows-latest,
               cxx: cl
@@ -50,6 +56,12 @@ jobs:
       run: |
         if [ "${{ matrix.config.os }}" = "windows-latest" ]; then
           cmake -B build -DSOATABLE_BUILD_TESTS=ON -DSOATABLE_BUILD_EXAMPLES=ON
+        elif [ "${{ matrix.config.sanitizers }}" = "true" ]; then
+          # AddressSanitizer + UndefinedBehaviorSanitizer; -fno-sanitize-recover makes UBSan abort
+          # so any finding fails the build. Benchmarks are excluded to keep the leg focused.
+          cmake -B build -DSOATABLE_BUILD_TESTS=ON -DSOATABLE_BUILD_EXAMPLES=ON -DSOATABLE_BUILD_BENCHMARKS=OFF \
+            -DCMAKE_CXX_COMPILER=${{ matrix.config.cxx }} \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer"
         else
           cmake -B build -DSOATABLE_BUILD_TESTS=ON -DSOATABLE_BUILD_EXAMPLES=ON -DCMAKE_CXX_COMPILER=${{ matrix.config.cxx }}
         fi
@@ -61,5 +73,8 @@ jobs:
     - name: Run Tests
       run: |
         cd build
+        # Treat any sanitizer finding as a hard failure.
+        export ASAN_OPTIONS=halt_on_error=1:abort_on_error=1
+        export UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1
         ctest -C Release --output-on-failure
       shell: bash

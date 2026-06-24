@@ -6,3 +6,4 @@ install/
 CMakeUserPresets.json
 *-workspace
 /.vscode/*.json
+prompts.txt

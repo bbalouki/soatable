@@ -9,7 +9,6 @@
 #include <cstdint>
 #include <functional>
 #include <future>
-#include <iostream>
 #include <limits>
 #include <optional>
 #include <ranges>
@@ -392,12 +391,20 @@ class DirtyMask {
 /// This allows for O(1) insertion, deletion, and iteration over present values.
 template <typename T>
 class ColumnVector {
+   public:
+    /// @brief Unsigned index type for dense and sparse positions.
+    ///
+    /// Widening this to `std::uint64_t` is the single change required for a 64-bit build; every
+    /// internal index derives from it. Kept at 32 bits to match `row_id::index`.
+    using size_type = std::uint32_t;
+
    private:
-    static constexpr std::int32_t tombstone = -1;
-    /// @brief Maps row_index -> dense_index.
-    std::vector<std::int32_t> m_sparse;
+    /// @brief Sentinel stored in m_sparse for a row that has no value in this column.
+    static constexpr size_type npos = std::numeric_limits<size_type>::max();
+    /// @brief Maps row_index -> dense_index (npos when absent).
+    std::vector<size_type> m_sparse;
     /// @brief Maps dense_index -> row_index.
-    std::vector<std::uint32_t> m_dense;
+    std::vector<size_type> m_dense;
     /// @brief The actual data stored densely.
     std::vector<T> m_data;
 
@@ -431,7 +438,7 @@ class ColumnVector {
     /// @param row_index The internal index of the row.
     /// @return True if a value is present, false otherwise.
     [[nodiscard]] bool contains(std::uint32_t row_index) const {
-        return row_index < m_sparse.size() && m_sparse[row_index] != tombstone;
+        return row_index < m_sparse.size() && m_sparse[row_index] != npos;
     }
 
     /// @brief Try to get a pointer to the value at the given row index.
@@ -441,7 +448,7 @@ class ColumnVector {
         if (!contains(row_index)) {
             return nullptr;
         }
-        return &m_data[static_cast<std::size_t>(m_sparse[row_index])];
+        return &m_data[m_sparse[row_index]];
     }
 
     /// @brief Try to get a const pointer to the value at the given row index.
@@ -451,7 +458,7 @@ class ColumnVector {
         if (!contains(row_index)) {
             return nullptr;
         }
-        return &m_data[static_cast<std::size_t>(m_sparse[row_index])];
+        return &m_data[m_sparse[row_index]];
     }
 
     /// @brief Get a reference to the value at the given row index. Asserts if not present.
@@ -459,7 +466,7 @@ class ColumnVector {
     /// @return Reference to the value.
     T& get(std::uint32_t row_index) {
         assert(contains(row_index) && "Out of bounds sparse column reference.");
-        return m_data[static_cast<std::size_t>(m_sparse[row_index])];
+        return m_data[m_sparse[row_index]];
     }
 
     /// @brief Get a const reference to the value at the given row index. Asserts if not present.
@@ -467,7 +474,7 @@ class ColumnVector {
     /// @return Const reference to the value.
     const T& get(std::uint32_t row_index) const {
         assert(contains(row_index) && "Out of bounds sparse column reference.");
-        return m_data[static_cast<std::size_t>(m_sparse[row_index])];
+        return m_data[m_sparse[row_index]];
     }
 
     /// @brief Emplace a value at the given row index.
@@ -475,21 +482,27 @@ class ColumnVector {
     /// @param row_index The internal index of the row.
     /// @param args Arguments to pass to the constructor of T.
     /// @return Reference to the emplaced value.
+    /// @note Strong exception guarantee when inserting a new value: the dense storage is grown and
+    /// only committed through the sparse slot once every throwing step has succeeded. Overwriting an
+    /// existing value offers the guarantee of T's assignment (strong for nothrow-assignable types).
     template <typename... Args>
     T& emplace(std::uint32_t row_index, Args&&... args) {
         if (row_index >= m_sparse.size()) {
-            m_sparse.resize(static_cast<std::size_t>(row_index) + 1, tombstone);
+            m_sparse.resize(static_cast<std::size_t>(row_index) + 1, npos);
         }
 
-        if (m_sparse[row_index] != tombstone) {
-            const std::size_t dense_index = static_cast<std::size_t>(m_sparse[row_index]);
-            m_data[dense_index]           = T(std::forward<Args>(args)...);
+        if (m_sparse[row_index] != npos) {
+            const size_type dense_index = m_sparse[row_index];
+            m_data[dense_index]         = T(std::forward<Args>(args)...);
             return m_data[dense_index];
         }
 
-        m_sparse[row_index] = static_cast<std::int32_t>(m_dense.size());
-        m_dense.push_back(row_index);
+        // Reserve the back-mapping first so its push_back cannot reallocate (and thus cannot throw)
+        // after the data element is constructed; the sparse slot is written last as the commit.
+        m_dense.reserve(m_dense.size() + 1);
         m_data.emplace_back(std::forward<Args>(args)...);
+        m_dense.push_back(row_index);
+        m_sparse[row_index] = static_cast<size_type>(m_dense.size() - 1);
         return m_data.back();
     }
 
@@ -500,43 +513,47 @@ class ColumnVector {
             return;
         }
 
-        const std::size_t   dense_index    = static_cast<std::size_t>(m_sparse[row_index]);
-        const std::uint32_t last_row_index = m_dense.back();
+        const size_type dense_index    = m_sparse[row_index];
+        const size_type last_row_index = m_dense.back();
 
-        // Swap with last
+        // Swap with last to keep the dense arrays contiguous.
         if (dense_index != m_data.size() - 1) {
             m_data[dense_index]      = std::move(m_data.back());
             m_dense[dense_index]     = m_dense.back();
-            m_sparse[last_row_index] = static_cast<std::int32_t>(dense_index);
+            m_sparse[last_row_index] = dense_index;
         }
 
-        m_sparse[row_index] = tombstone;
+        m_sparse[row_index] = npos;
         m_data.pop_back();
         m_dense.pop_back();
     }
 
     /// @brief Physically reorder the dense storage based on a new row order.
     /// @param row_order The new order of row indices.
+    /// @note Basic exception guarantee: if a contained element's move constructor throws, the
+    /// column is left in a valid but unspecified state. The index rebuild after the move loop is
+    /// no-throw, so the sparse/dense/data arrays are never left mutually inconsistent.
     void reorder(const std::vector<std::uint32_t>& row_order) {
-        std::vector<T>             new_data;
-        std::vector<std::uint32_t> new_dense;
+        std::vector<T>         new_data;
+        std::vector<size_type> new_dense;
         new_data.reserve(m_data.size());
         new_dense.reserve(m_dense.size());
 
-        for (const std::uint32_t row_index : row_order) {
+        for (const size_type row_index : row_order) {
             if (contains(row_index)) {
                 new_data.push_back(std::move(get(row_index)));
                 new_dense.push_back(row_index);
             }
         }
 
-        std::fill(m_sparse.begin(), m_sparse.end(), tombstone);
+        std::vector<size_type> new_sparse(m_sparse.size(), npos);
         for (std::size_t i = 0; i < new_dense.size(); ++i) {
-            m_sparse[new_dense[i]] = static_cast<std::int32_t>(i);
+            new_sparse[new_dense[i]] = static_cast<size_type>(i);
         }
 
-        m_data  = std::move(new_data);
-        m_dense = std::move(new_dense);
+        m_sparse = std::move(new_sparse);
+        m_data   = std::move(new_data);
+        m_dense  = std::move(new_dense);
     }
 
     /// @brief Number of present values in the column.
@@ -588,6 +605,8 @@ class SoaTable {
 
    private:
     static constexpr std::uint32_t npos = std::numeric_limits<std::uint32_t>::max();
+    /// @brief Generation value at which a slot is retired instead of recycled (ABA wraparound bound).
+    static constexpr std::uint32_t max_generation = std::numeric_limits<std::uint32_t>::max();
 
     /// @brief Metadata for all row slots.
     std::vector<RowMeta> m_rows;
@@ -678,6 +697,9 @@ class SoaTable {
 
     /// @brief Insert a new empty row and return its ID.
     /// @return The row_id of the newly created row.
+    /// @note Strong exception guarantee. In the grow path both parallel arrays are reserved before
+    /// either is mutated, so a `bad_alloc` cannot leave them at mismatched sizes.
+    /// @throws std::overflow_error If the row_id index space is exhausted.
     [[nodiscard]] row_id insert() {
         std::uint32_t index = 0;
         if (m_free_head != npos) {
@@ -689,6 +711,8 @@ class SoaTable {
             if (!can_address_rows(m_rows.size() + 1)) {
                 throw std::overflow_error("SoaTable exhausted the row_id index space.");
             }
+            m_rows.reserve(m_rows.size() + 1);
+            m_free_links.reserve(m_free_links.size() + 1);
             index = static_cast<std::uint32_t>(m_rows.size());
             m_rows.push_back(RowMeta {});
             m_rows.back().alive = true;
@@ -712,6 +736,12 @@ class SoaTable {
 
     /// @brief Erase a row by ID.
     /// @param id The row_id of the row to erase.
+    /// @note Basic exception guarantee: column element removal relies on T's move assignment, which
+    /// may throw for non-nothrow-movable types, leaving the table valid but in an unspecified state.
+    /// @note ABA safety: a slot's generation defeats stale handles for up to 2^32 erase/reuse cycles.
+    /// When that counter would wrap, the slot is retired (never recycled) so a saturated stale handle
+    /// can never alias a freshly inserted row. Retiring leaks one slot, which is acceptable given the
+    /// cycle count required to reach it.
     void erase(row_id id) {
         if (!is_valid(id)) {
             return;
@@ -728,11 +758,15 @@ class SoaTable {
 
         auto& meta = m_rows[index];
         meta.alive = false;
-        ++meta.generation;
         meta.signature.reset();
 
-        m_free_links[index] = m_free_head;
-        m_free_head         = index;
+        if (meta.generation == max_generation) {
+            // Retire the saturated slot: leave it dead and off the free list forever.
+        } else {
+            ++meta.generation;
+            m_free_links[index] = m_free_head;
+            m_free_head         = index;
+        }
 
         --m_alive_count;
     }
@@ -743,6 +777,9 @@ class SoaTable {
     /// @param id The row_id of the row.
     /// @param args Arguments to pass to the constructor of T.
     /// @return Reference to the assigned value.
+    /// @note Strong exception guarantee when adding a new column value (delegates to the strong path
+    /// of ColumnVector::emplace); overwriting an existing value inherits T's assignment guarantee.
+    /// @throws std::out_of_range If the row_id is invalid (thrown before any mutation).
     template <typename T, typename... Args>
         requires registered_column_v<T>
     T& assign(row_id id, Args&&... args) {
@@ -1023,6 +1060,8 @@ class SoaTable {
     /// criteria.
     /// @tparam SortCriteria The types of the comparison criteria.
     /// @param criteria The comparison criteria. Each should be a pair of (ColumnType, Comparator).
+    /// @note Basic exception guarantee: each column is reordered in turn (see ColumnVector::reorder),
+    /// so a throwing element move leaves the table valid but only partially reordered.
     template <typename... SortCriteria>
     void sort_by_multi(SortCriteria&&... criteria) {
         // Find smallest driver if possible, otherwise use all alive rows
@@ -1076,6 +1115,7 @@ class SoaTable {
     /// @tparam T The type of the column to sort by.
     /// @tparam Compare The type of the comparator.
     /// @param comp The comparator to use for sorting values of type T.
+    /// @note Basic exception guarantee (see ColumnVector::reorder).
     template <typename T, typename Compare>
         requires registered_column_v<T>
     void sort_by_column(Compare&& comp) {
@@ -1104,6 +1144,8 @@ class SoaTable {
     /// @tparam T The type of the column to sort by.
     /// @tparam Compare The type of the comparator.
     /// @param comp The comparator to use for sorting values of type T.
+    /// @note Basic exception guarantee. An exception thrown while reordering a column is rethrown by
+    /// future::get after all tasks join, leaving the table valid but partially reordered.
     template <typename T, typename Compare>
         requires registered_column_v<T>
     void sort_by_column_parallel(Compare&& comp) {
@@ -1267,5 +1309,10 @@ struct RowHandle {
 
 }  // namespace soatable
 
-/// @brief Compatibility alias for the old namespace.
+#ifdef SOATABLE_ENABLE_SSTD_ALIAS
+/// @brief Opt-in compatibility alias for the old namespace.
+///
+/// Define `SOATABLE_ENABLE_SSTD_ALIAS` before including this header to expose `sstd`. It is opt-in
+/// because a short top-level namespace alias is prone to collisions in large downstream builds.
 namespace sstd = soatable;
+#endif
