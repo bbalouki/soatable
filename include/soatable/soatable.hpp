@@ -1977,34 +1977,6 @@ struct row_handle {
     }
 };
 
-// =====================================
-// 6. Deprecated PascalCase type aliases
-// =====================================
-
-// The public API uses std-style lowercase names (soa_table, row_handle, column_vector,
-// delta_value, dirty_mask). The previous PascalCase spellings remain as deprecated aliases for one
-// migration window; they will be removed in a future major release.
-
-/// @deprecated Renamed to soa_table.
-template <typename... Columns>
-using SoaTable [[deprecated("Renamed to soa_table.")]] = soa_table<Columns...>;
-
-/// @deprecated Renamed to row_handle.
-template <typename... RegisteredColumns>
-using RowHandle [[deprecated("Renamed to row_handle.")]] = row_handle<RegisteredColumns...>;
-
-/// @deprecated Renamed to column_vector.
-template <typename T>
-using ColumnVector [[deprecated("Renamed to column_vector.")]] = column_vector<T>;
-
-/// @deprecated Renamed to delta_value.
-template <typename T = double, typename DeltaType = std::int16_t, int ScaleM1000 = 10>
-using DeltaValue [[deprecated("Renamed to delta_value.")]] = delta_value<T, DeltaType, ScaleM1000>;
-
-/// @deprecated Renamed to dirty_mask.
-template <typename EnumType, typename MaskType = std::uint32_t>
-using DirtyMask [[deprecated("Renamed to dirty_mask.")]] = dirty_mask<EnumType, MaskType>;
-
 }  // namespace soatable
 
 #ifdef SOATABLE_ENABLE_SSTD_ALIAS

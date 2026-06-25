@@ -3,7 +3,7 @@
 ## Testing Philosophy
 
 - Use real implementations; only mock external dependencies (LLM APIs, cloud services).
-- Test public interface behavior, not implementation details — keeps tests resilient to refactoring.
+- Test public interface behavior, not implementation details, keeps tests resilient to refactoring.
 - Tests must be fast, isolated, and have descriptive names; cover edge cases and error conditions.
 - Location: `tests/unittests/` following source structure.
 
@@ -29,8 +29,9 @@
 ## Style & Naming
 
 - `m_` prefix for private members; `snake_case` for variables/functions; `PascalCase` for types; `SCREAMING_SNAKE_CASE` for macros and Constants.
-- All symbols must be at least 3 characters long. Use `std::print`/`std::println`/`std::format` for output.
-- No magic literals — replace with named `constexpr` values. Declare variables close to first use.
+- All symbols (variable, parameters, functions) must be at least 3 characters long.
+- Alwayse Use `std::print`/`std::println`/`std::format` for output.
+- No magic literals, replace with named `constexpr` values. Declare variables close to first use.
 - Keep functions short and flat; remove unused variables, parameters, and includes.
 - Use `#pragma once`; keep headers to declarations and inline/template definitions only.
 - Do not use mdash (`--`) in code, comments, or documentation.
@@ -40,7 +41,7 @@
 - Always initialize variables at declaration; prefer brace initialization `T x{value}` to prevent narrowing.
 - Use `auto` when type is obvious; `const` by default; `constexpr` for compile-time constants.
 - Avoid `using namespace std` in headers. Use `enum class`; use `std::string_view` for read-only strings.
-- Never mix signed/unsigned arithmetic; never use C-style casts — use `static_cast`, `dynamic_cast`, etc.
+- Never mix signed/unsigned arithmetic; never use C-style casts, use `static_cast`, `dynamic_cast`, etc.
 - Never use raw pointers for ownership; use references or smart pointers instead. Avoid `void*` and `reinterpret_cast`.
 - Never use `goto` or `longjmp`; prefer structured control flow and RAII for cleanup.
 - Never use C-style arrays or C-style strings; prefer `std::array`, `std::vector`, and `std::string` for safety and convenience.
@@ -48,7 +49,7 @@
 ## Memory Management
 
 - Follow RAII: tie every resource (memory, file, mutex) to an object's lifetime.
-- Use `std::unique_ptr`/`std::shared_ptr`/`std::weak_ptr` via `make_unique`/`make_shared` — never `new`/`delete` directly.
+- Use `std::unique_ptr`/`std::shared_ptr`/`std::weak_ptr` via `make_unique`/`make_shared`, never `new`/`delete` directly.
 - Follow Rule of Zero (all RAII members) or Rule of Five (when owning a raw resource).
 - Detect leaks with AddressSanitizer; use standard containers over raw arrays.
 
@@ -65,7 +66,7 @@
 
 - Use exceptions for errors (not for normal control flow); catch by `const` reference to avoid slicing.
 - Maintain a consistent exception-safety guarantee: basic, strong, or no-throw.
-- Use `static_assert` for compile-time invariants; `assert()` for debug-only preconditions — never on user input.
+- Use `static_assert` for compile-time invariants; `assert()` for debug-only preconditions, never on user input.
 - Consider `std::expected<T, E>` (C++23) for predictable, performance-sensitive failure paths.
 
 ## Templates & Concurrency

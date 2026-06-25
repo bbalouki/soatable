@@ -12,16 +12,16 @@ queried by a subset of fields. It stores each column densely and independently, 
 generational handles, and drives joins off the smallest column, so sparse, column-oriented workloads
 get cache-friendly memory and fast queries without giving up a row-oriented API.
 
-The core is a single header with **no dependencies**. Everything beyond the container — compute,
+The core is a single header with **no dependencies**. Everything beyond the container, compute,
 queries, serialization, allocators, concurrency, out-of-core storage, time-series, units, and runtime
-schemas — lives in **opt-in headers you include only if you use them**.
+schemas, lives in **opt-in headers you include only if you use them**.
 
 ## Table of Contents
 
 - [The idea in 30 seconds](#the-idea-in-30-seconds)
 - [When SoaTable is the right tool](#when-soatable-is-the-right-tool)
 - [Quick start](#quick-start)
-- [Feature tour (what / why / how)](#feature-tour-what--why--how)
+- [Feature tour ](#feature-tour-what--why--how)
   - [1. The container: sparse columns + stable handles](#1-the-container-sparse-columns--stable-handles)
   - [2. Querying: select, view, and structured bindings](#2-querying-select-view-and-structured-bindings)
   - [3. Accessing values safely](#3-accessing-values-safely)
@@ -58,7 +58,7 @@ That is great until your access pattern stops matching your layout. AoS hurts wh
   `std::optional` everywhere.
 - **Identity must be stable.** Erasing from a vector invalidates indices or forces shifting.
 
-SoaTable stores a **Structure of Arrays** under the hood — each column is its own dense array — but
+SoaTable stores a **Structure of Arrays** under the hood, each column is its own dense array, but
 keeps a row-oriented API for insertion and handles. Columns are **independent and sparse**: a column
 only stores the rows that actually have it, so you pay only for what each row uses. Queries iterate the
 **smallest** requested column and check the rest, which is where the speed comes from.
@@ -67,14 +67,14 @@ only stores the rows that actually have it, so you pay only for what each row us
 
 **Reach for it when:**
 
-- **Entity-Component-System / game worlds** — entities with sparse components, stable handles across
+- **Entity-Component-System / game worlds**, entities with sparse components, stable handles across
   frames, and systems that iterate a few components at a time.
-- **Finance** — tick and portfolio tables, columnar analytics, group-by aggregation, compact storage,
+- **Finance**, tick and portfolio tables, columnar analytics, group-by aggregation, compact storage,
   and fast snapshots.
-- **Engineering / aerospace telemetry** — frame stores with optional channels, smoothly varying signals
+- **Engineering / aerospace telemetry**, frame stores with optional channels, smoothly varying signals
   (`delta_value`), dirty-region recompute, dimensional safety, and a no-exceptions build for flight
   software.
-- **Scientific / data workloads** — hand a column straight to a SIMD kernel or BLAS through a zero-copy
+- **Scientific / data workloads**, hand a column straight to a SIMD kernel or BLAS through a zero-copy
   span, run vectorized ufuncs, or memory-map columns that exceed RAM.
 
 **Prefer a plain `std::vector<Struct>` when:** the table is tiny, rows are always dense, and every pass
@@ -110,7 +110,7 @@ int main() {
 }
 ```
 
-## Feature tour (what / why / how)
+## Feature tour
 
 ### 1. The container: sparse columns + stable handles
 
@@ -153,10 +153,10 @@ for (auto [id, name, age] : t.select<Name, std::optional<Age>>()) { /* age may b
 
 **What.** Three accessor styles, so you pick your failure mode:
 
-| Accessor | On missing column | Use when |
-| --- | --- | --- |
-| `get<T>(id)` | throws `std::out_of_range` | you expect it to be there |
-| `try_get<T>(id)` | returns `nullptr` | you want a cheap presence check |
+| Accessor              | On missing column                        | Use when                         |
+| --------------------- | ---------------------------------------- | -------------------------------- |
+| `get<T>(id)`          | throws `std::out_of_range`               | you expect it to be there        |
+| `try_get<T>(id)`      | returns `nullptr`                        | you want a cheap presence check  |
 | `get_expected<T>(id)` | returns `std::expected<…, access_error>` | hot paths / no-exceptions builds |
 
 **Why.** Predictable error handling matters for finance and aerospace code that avoids exceptions on hot
@@ -193,19 +193,19 @@ soatable::soa_table<...> restored;
 soatable::load(restored, bytes);
 ```
 
-### 6. The compute layer (the "numpy part")
+### 6. The compute layer
 
 **What.** Opt-in `<soatable/compute.hpp>`:
 
-- single-column ufuncs over spans — `transform`, `reduce`, `inclusive_scan`, `count_if`;
-- policy-agnostic column helpers — `transform_column`, `reduce_column`, `count_column_if`;
-- broadcasting and subsets — `add_scalar`, `transform_if`, `transform_masked`, `transform_strided`;
-- cross-column row-wise compute — `assign_from<Out, In...>()` (e.g. `pnl = price * qty`);
-- chunk-parallel — `transform_column_parallel`, `for_each_chunk`.
+- single-column ufuncs over spans, `transform`, `reduce`, `inclusive_scan`, `count_if`;
+- policy-agnostic column helpers, `transform_column`, `reduce_column`, `count_column_if`;
+- broadcasting and subsets, `add_scalar`, `transform_if`, `transform_masked`, `transform_strided`;
+- cross-column row-wise compute, `assign_from<Out, In...>()` (e.g. `pnl = price * qty`);
+- chunk-parallel, `transform_column_parallel`, `for_each_chunk`.
 
 **Why.** Express a vectorized operation once and let the compiler auto-vectorize over the 64-byte-aligned
 storage. Cross-column math goes through the `select`/`view` join because independent sparse columns are
-not row-aligned in storage — so `assign_from` only touches rows that have all inputs.
+not row-aligned in storage, so `assign_from` only touches rows that have all inputs.
 
 **How.**
 
@@ -221,7 +221,7 @@ double gross = soatable::compute::reduce_column<Pnl>(t, 0.0,
 **What.** Opt-in `<soatable/query.hpp>`: `select_where<Cols...>(t, predicate)` filters the join by a row
 predicate; `group_reduce` / `group_sum` / `group_count` aggregate by a projected key.
 
-**Why.** Analytics ergonomics — `where(...).select(...)` and group-by — without leaving C++ and without a
+**Why.** Analytics ergonomics, `where(...).select(...)` and group-by, without leaving C++ and without a
 query engine. Filtering composes lazily on top of the smallest-driver scan.
 
 **How.**
@@ -235,13 +235,13 @@ auto volume = soatable::query::group_sum<Symbol, Notional>(t,
 
 **What.** The layout is a policy on the table type, with the row API unchanged:
 
-- `soa_table<...>` — flat, contiguous, 64-byte SIMD-aligned (default).
-- `aosoa_table<Tile, ...>` / `chunked_soa_table<Chunk, ...>` — tiled (AoSoA / Arrow record-batch)
+- `soa_table<...>`, flat, contiguous, 64-byte SIMD-aligned (default).
+- `aosoa_table<Tile, ...>` / `chunked_soa_table<Chunk, ...>`, tiled (AoSoA / Arrow record-batch)
   storage; growth never copies existing chunks. `column_tiles<T>()` views either layout as per-tile
   aligned spans.
-- `custom_soa_table<Allocator, ...>` — any allocator; opt-in `<soatable/pmr.hpp>` `pmr_soa_table` uses a
+- `custom_soa_table<Allocator, ...>`, any allocator; opt-in `<soatable/pmr.hpp>` `pmr_soa_table` uses a
   `std::pmr` arena / monotonic / pool resource.
-- opt-in `<soatable/mmap.hpp>` `mmap_soa_table` — demand-paged memory-mapped storage so a column can
+- opt-in `<soatable/mmap.hpp>` `mmap_soa_table`, demand-paged memory-mapped storage so a column can
   exceed physical RAM, paged in lazily by the OS.
 
 **Why.** Match storage to the workload without rewriting your code: SIMD-aligned contiguous for analytics,
@@ -269,7 +269,7 @@ auto n = shared.read([](const Table& t){ return t.size(); });   // many readers 
 - **Time-series** (`<soatable/timeseries.hpp>`): `rolling_sum` / `rolling_mean` / `deltas`,
   `rolling_mean_column`, and `for_each_dirty` for incremental recompute of changed rows.
 - **Dimensional safety** (`<soatable/units.hpp>`): `quantity<T, Dimension>` makes adding metres to seconds
-  a **compile error** while multiply/divide combine dimensions — usable directly as a column type.
+  a **compile error** while multiply/divide combine dimensions, usable directly as a column type.
 - **Runtime schema evolution** (`<soatable/dynamic.hpp>`): `dynamic_table` adds/removes typed columns at
   runtime, type-checks access without RTTI, and carries per-column metadata (e.g. unit labels).
 
@@ -284,29 +284,29 @@ auto n = shared.read([](const Table& t){ return t.size(); });   // many readers 
 
 ## The opt-in headers at a glance
 
-| Header | Provides | Pulls in |
-| --- | --- | --- |
-| `soatable/soatable.hpp` | the container, spans, validity, compression helpers | nothing extra |
-| `soatable/compute.hpp` | ufuncs, broadcasting, chunk-parallel compute | `<future>`, `<thread>` |
-| `soatable/query.hpp` | `select_where`, group-by aggregation | `<unordered_map>` |
-| `soatable/serialize.hpp` | versioned `save()` / `load()` | — |
-| `soatable/pmr.hpp` | `pmr_soa_table` | `<memory_resource>` |
-| `soatable/mmap.hpp` | `mmap_soa_table` (out-of-core) | `<sys/mman.h>` / `<windows.h>` |
-| `soatable/concurrent.hpp` | `synchronized_table` | `<shared_mutex>` |
-| `soatable/timeseries.hpp` | rolling windows, deltas, dirty scans | — |
-| `soatable/units.hpp` | dimensional `quantity` | — |
-| `soatable/dynamic.hpp` | runtime `dynamic_table` | `<unordered_map>` |
-| `soatable/reflect.hpp` | `table_for<Struct>` | — |
+| Header                    | Provides                                            | Pulls in                       |
+| ------------------------- | --------------------------------------------------- | ------------------------------ |
+| `soatable/soatable.hpp`   | the container, spans, validity, compression helpers | nothing extra                  |
+| `soatable/compute.hpp`    | ufuncs, broadcasting, chunk-parallel compute        | `<future>`, `<thread>`         |
+| `soatable/query.hpp`      | `select_where`, group-by aggregation                | `<unordered_map>`              |
+| `soatable/serialize.hpp`  | versioned `save()` / `load()`                       |,                              |
+| `soatable/pmr.hpp`        | `pmr_soa_table`                                     | `<memory_resource>`            |
+| `soatable/mmap.hpp`       | `mmap_soa_table` (out-of-core)                      | `<sys/mman.h>` / `<windows.h>` |
+| `soatable/concurrent.hpp` | `synchronized_table`                                | `<shared_mutex>`               |
+| `soatable/timeseries.hpp` | rolling windows, deltas, dirty scans                |,                              |
+| `soatable/units.hpp`      | dimensional `quantity`                              |,                              |
+| `soatable/dynamic.hpp`    | runtime `dynamic_table`                             | `<unordered_map>`              |
+| `soatable/reflect.hpp`    | `table_for<Struct>`                                 |,                              |
 
 ## Domain cookbooks
 
 Runnable, worked examples (built as `soatable_cookbook_*` targets):
 
-- [Finance — tick store](example/cookbook/finance_tick_store.cpp): ingest trades, derive P&L per row,
+- [Finance, tick store](example/cookbook/finance_tick_store.cpp): ingest trades, derive P&L per row,
   aggregate notional volume per symbol, filter large trades.
 - [Game / ECS](example/cookbook/game_ecs.cpp): a sparse-component world with a motion system over
   `view<Position, Velocity>()` and a data-less tag.
-- [Aerospace — telemetry](example/cookbook/aerospace_telemetry.cpp): `delta_value` altitude tracking,
+- [Aerospace, telemetry](example/cookbook/aerospace_telemetry.cpp): `delta_value` altitude tracking,
   `dirty_mask` per-frame flags, and a validity bitmap.
 - [Scientific data](example/cookbook/scientific_table.cpp): zero-copy span compute and `quantized_float`
   storage.
@@ -354,12 +354,12 @@ Array-of-Structures and hand-rolled columnar baselines:
 
 Representative selective-join results (250,000 rows, Release):
 
-| Method | Time |
-| --- | --- |
-| SoaTable `select` (smallest driver) | ~168,000 ns |
-| Forced largest-column driver | ~1,547,000 ns |
-| Hand-rolled columnar scan | ~1,058,000 ns |
-| AoS branch scan | ~1,303,000 ns |
+| Method                              | Time          |
+| ----------------------------------- | ------------- |
+| SoaTable `select` (smallest driver) | ~168,000 ns   |
+| Forced largest-column driver        | ~1,547,000 ns |
+| Hand-rolled columnar scan           | ~1,058,000 ns |
+| AoS branch scan                     | ~1,303,000 ns |
 
 The ~9x gap between the smallest-driver and forced-largest-driver runs validates the heuristic of driving
 iteration off the smallest required column. Numbers are machine dependent; reproduce with the harness
@@ -390,4 +390,4 @@ for the history and [CONTRIBUTING.md](CONTRIBUTING.md) to get started.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).
