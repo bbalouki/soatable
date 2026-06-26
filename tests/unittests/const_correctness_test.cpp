@@ -20,15 +20,17 @@ namespace {
 using row_id = soatable::row_id;
 
 // get<T> respects the table's const-qualification.
-static_assert(std::is_same_v<
-              decltype(std::declval<DemoTable&>().get<Age>(std::declval<row_id>())), Age&>);
+static_assert(
+    std::is_same_v<decltype(std::declval<DemoTable&>().get<Age>(std::declval<row_id>())), Age&>
+);
 static_assert(std::is_same_v<
               decltype(std::declval<const DemoTable&>().get<Age>(std::declval<row_id>())),
               const Age&>);
 
 // try_get<T> likewise.
-static_assert(std::is_same_v<
-              decltype(std::declval<DemoTable&>().try_get<Age>(std::declval<row_id>())), Age*>);
+static_assert(
+    std::is_same_v<decltype(std::declval<DemoTable&>().try_get<Age>(std::declval<row_id>())), Age*>
+);
 static_assert(std::is_same_v<
               decltype(std::declval<const DemoTable&>().try_get<Age>(std::declval<row_id>())),
               const Age*>);

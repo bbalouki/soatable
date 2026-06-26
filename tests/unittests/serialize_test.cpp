@@ -5,13 +5,14 @@
 ///
 /// Uses trivially-copyable columns, which the fast path requires.
 
+#include "soatable/serialize.hpp"
+
 #include <gtest/gtest.h>
 
 #include <cstddef>
 #include <span>
 #include <vector>
 
-#include "soatable/serialize.hpp"
 #include "soatable/soatable.hpp"
 
 namespace {
@@ -28,7 +29,7 @@ using TickTable = soatable::soa_table<Px, Qty>;
 }  // namespace
 
 TEST(SerializeTest, RoundTripPreservesValuesAndHandles) {
-    TickTable table;
+    TickTable  table;
     const auto a = table.insert();
     table.assign<Px>(a, Px {10.5});
     table.assign<Qty>(a, Qty {3});
@@ -50,9 +51,9 @@ TEST(SerializeTest, RoundTripPreservesValuesAndHandles) {
 }
 
 TEST(SerializeTest, RoundTripPreservesGenerationsAfterErase) {
-    TickTable table;
+    TickTable  table;
     const auto first = table.insert();
-    table.erase(first);             // Bumps the slot's generation.
+    table.erase(first);  // Bumps the slot's generation.
     const auto second = table.insert();
     table.assign<Px>(second, Px {1.0});
 
@@ -92,7 +93,7 @@ TEST(SerializeTest, RejectsBadMagic) {
 }
 
 TEST(SerializeTest, RejectsTruncatedBuffer) {
-    TickTable table;
+    TickTable  table;
     const auto id = table.insert();
     table.assign<Px>(id, Px {1.0});
 

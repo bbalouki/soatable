@@ -17,7 +17,7 @@ using soatable_test::Name;
 using soatable_test::Score;
 
 TEST(TableTest, BasicInsertAssignAndGet) {
-    DemoTable table;
+    DemoTable  table;
     const auto id = table.insert();
     EXPECT_TRUE(table.is_valid(id));
 
@@ -31,7 +31,7 @@ TEST(TableTest, BasicInsertAssignAndGet) {
 }
 
 TEST(TableTest, TryGetReturnsNullForAbsentColumn) {
-    DemoTable table;
+    DemoTable  table;
     const auto id = table.insert();
     table.assign<Name>(id, "Bob");
 
@@ -40,20 +40,20 @@ TEST(TableTest, TryGetReturnsNullForAbsentColumn) {
 }
 
 TEST(TableTest, GetThrowsForAbsentColumn) {
-    DemoTable table;
+    DemoTable  table;
     const auto id = table.insert();
     EXPECT_THROW(static_cast<void>(table.get<Age>(id)), std::out_of_range);
 }
 
 TEST(TableTest, AssignThrowsForInvalidRow) {
-    DemoTable table;
+    DemoTable  table;
     const auto id = table.insert();
     table.erase(id);
     EXPECT_THROW(table.assign<Age>(id, 1), std::out_of_range);
 }
 
 TEST(TableTest, UnassignRemovesColumnButKeepsRow) {
-    DemoTable table;
+    DemoTable  table;
     const auto id = table.insert();
     table.assign<Age>(id, 7);
     ASSERT_TRUE(table.contains<Age>(id));
@@ -64,7 +64,7 @@ TEST(TableTest, UnassignRemovesColumnButKeepsRow) {
 }
 
 TEST(TableTest, EraseInvalidatesHandleAndBumpsGeneration) {
-    DemoTable table;
+    DemoTable  table;
     const auto id = table.insert();
     table.erase(id);
     EXPECT_FALSE(table.is_valid(id));
@@ -77,7 +77,7 @@ TEST(TableTest, EraseInvalidatesHandleAndBumpsGeneration) {
 }
 
 TEST(TableTest, StaleHandleNeverAccessesRecycledRow) {
-    DemoTable table;
+    DemoTable  table;
     const auto first = table.insert();
     table.assign<Age>(first, 1);
     table.erase(first);
@@ -107,7 +107,7 @@ TEST(TableTest, FreeListRecyclesSlotsUnderChurn) {
 }
 
 TEST(TableTest, InterleavedChurnKeepsSizeConsistent) {
-    DemoTable table;
+    DemoTable                     table;
     std::vector<soatable::row_id> live;
 
     for (int iteration = 0; iteration < 500; ++iteration) {
@@ -141,7 +141,7 @@ TEST(TableTest, EmptyTableReportsEmpty) {
 }
 
 TEST(TableTest, ClearResetsRowsButPreservesGenerationMonotonicity) {
-    DemoTable table;
+    DemoTable  table;
     const auto id = table.insert();
     table.assign<Age>(id, 5);
     table.clear();
@@ -162,7 +162,7 @@ TEST(TableTest, ReserveAndShrinkPreserveData) {
 }
 
 TEST(TableTest, LargeTableRetainsEveryRow) {
-    DemoTable table;
+    DemoTable     table;
     constexpr int row_count = 50000;
 
     std::vector<soatable::row_id> ids;

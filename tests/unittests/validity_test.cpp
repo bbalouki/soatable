@@ -16,7 +16,7 @@ using soatable_test::DemoTable;
 using soatable_test::Name;
 
 TEST(ValidityTest, BitmapMarksRowsThatHaveColumn) {
-    DemoTable table;
+    DemoTable  table;
     const auto a = table.insert();
     table.assign<Age>(a, 1);
     const auto b = table.insert();  // No Age.
@@ -32,7 +32,7 @@ TEST(ValidityTest, BitmapMarksRowsThatHaveColumn) {
 }
 
 TEST(ValidityTest, ErasedRowsAreNotValid) {
-    DemoTable table;
+    DemoTable  table;
     const auto a = table.insert();
     table.assign<Age>(a, 1);
     const auto b = table.insert();
@@ -46,7 +46,7 @@ TEST(ValidityTest, ErasedRowsAreNotValid) {
 }
 
 TEST(ValidityTest, ForEachSetVisitsPresentRowsInOrder) {
-    DemoTable table;
+    DemoTable                  table;
     std::vector<std::uint32_t> expected;
     for (int i = 0; i < 5; ++i) {
         const auto id = table.insert();
@@ -64,7 +64,7 @@ TEST(ValidityTest, ForEachSetVisitsPresentRowsInOrder) {
 }
 
 TEST(ValidityTest, BitmapComposesWithMakeRowId) {
-    DemoTable table;
+    DemoTable  table;
     const auto a = table.insert();
     table.assign<Age>(a, 42);
 
@@ -79,7 +79,7 @@ TEST(ValidityTest, BitmapComposesWithMakeRowId) {
 }
 
 TEST(ValidityTest, EmptyColumnHasZeroCount) {
-    DemoTable table;
+    DemoTable  table;
     const auto id = table.insert();
     table.assign<Name>(id, "x");
     EXPECT_EQ(table.validity<Age>().count(), 0U);

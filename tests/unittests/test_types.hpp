@@ -33,11 +33,11 @@ struct MoveOnly {
     MoveOnly() = default;
     explicit MoveOnly(int initial) : value(initial) {}
 
-    MoveOnly(const MoveOnly&)            = delete;
-    MoveOnly& operator=(const MoveOnly&) = delete;
-    MoveOnly(MoveOnly&&) noexcept        = default;
+    MoveOnly(const MoveOnly&)                = delete;
+    MoveOnly& operator=(const MoveOnly&)     = delete;
+    MoveOnly(MoveOnly&&) noexcept            = default;
     MoveOnly& operator=(MoveOnly&&) noexcept = default;
-    ~MoveOnly()                          = default;
+    ~MoveOnly()                              = default;
 };
 
 // A column type whose constructor throws once a budget of successful constructions is exhausted.
@@ -52,11 +52,11 @@ struct ThrowOnNth {
     ThrowOnNth() : ThrowOnNth(0) {}
     explicit ThrowOnNth(int initial) : value(initial) { consume_budget(); }
 
-    ThrowOnNth(const ThrowOnNth&)            = default;
-    ThrowOnNth& operator=(const ThrowOnNth&) = default;
-    ThrowOnNth(ThrowOnNth&&) noexcept        = default;
+    ThrowOnNth(const ThrowOnNth&)                = default;
+    ThrowOnNth& operator=(const ThrowOnNth&)     = default;
+    ThrowOnNth(ThrowOnNth&&) noexcept            = default;
     ThrowOnNth& operator=(ThrowOnNth&&) noexcept = default;
-    ~ThrowOnNth()                            = default;
+    ~ThrowOnNth()                                = default;
 
     // Restore the unlimited default so one test cannot leak its budget into another.
     static void reset_budget() noexcept { construct_budget = -1; }

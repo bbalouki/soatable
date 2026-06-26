@@ -3,12 +3,13 @@
 /// (group_reduce/sum/count).
 /// @author Bertin Balouki SIMYELI
 
+#include "soatable/query.hpp"
+
 #include <gtest/gtest.h>
 
 #include <algorithm>
 #include <unordered_map>
 
-#include "soatable/query.hpp"
 #include "soatable/soatable.hpp"
 
 namespace {
@@ -38,7 +39,7 @@ Trades make_trades() {
 }  // namespace
 
 TEST(QueryTest, SelectWhereFiltersRows) {
-    Trades table = make_trades();
+    Trades table   = make_trades();
     int    matches = 0;
     for (auto row : soatable::query::select_where<Pnl, Region>(table, [](auto r) {
              return r.template get<Pnl>().value >= 5.0;
@@ -81,10 +82,9 @@ TEST(QueryTest, GroupSumByRegion) {
 }
 
 TEST(QueryTest, GroupCountByRegion) {
-    Trades     table  = make_trades();
-    const auto counts = soatable::query::group_count<Region>(table, [](const Region& r) {
-        return r.id;
-    });
+    Trades     table = make_trades();
+    const auto counts =
+        soatable::query::group_count<Region>(table, [](const Region& r) { return r.id; });
     ASSERT_EQ(counts.size(), 3U);
     EXPECT_EQ(counts.at(0), 3U);
     EXPECT_EQ(counts.at(1), 3U);
@@ -92,12 +92,13 @@ TEST(QueryTest, GroupCountByRegion) {
 }
 
 TEST(QueryTest, GroupReduceComputesPerGroupMax) {
-    Trades     table = make_trades();
-    const auto maxima =
-        soatable::query::group_reduce<Region, Pnl>(
-            table, [](const Region& r) { return r.id; }, 0.0,
-            [](double acc, const Pnl& p) { return std::max(acc, p.value); }
-        );
+    Trades     table  = make_trades();
+    const auto maxima = soatable::query::group_reduce<Region, Pnl>(
+        table,
+        [](const Region& r) { return r.id; },
+        0.0,
+        [](double acc, const Pnl& p) { return std::max(acc, p.value); }
+    );
     EXPECT_DOUBLE_EQ(maxima.at(0), 6.0);
     EXPECT_DOUBLE_EQ(maxima.at(1), 7.0);
     EXPECT_DOUBLE_EQ(maxima.at(2), 8.0);

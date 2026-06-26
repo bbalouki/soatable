@@ -3,12 +3,12 @@
 /// type-checks access, stores sparse cells, and carries per-column metadata.
 /// @author Bertin Balouki SIMYELI
 
+#include "soatable/dynamic.hpp"
+
 #include <gtest/gtest.h>
 
 #include <stdexcept>
 #include <string>
-
-#include "soatable/dynamic.hpp"
 
 TEST(DynamicTest, AddSetGetTypedColumns) {
     soatable::dynamic_table table;
@@ -41,7 +41,7 @@ TEST(DynamicTest, TypeMismatchIsRejected) {
     const auto row = table.insert_row();
     table.set<int>(row, "age", 5);
 
-    EXPECT_EQ(table.get<double>(row, "age"), nullptr);                 // Wrong type: null.
+    EXPECT_EQ(table.get<double>(row, "age"), nullptr);  // Wrong type: null.
     EXPECT_THROW(table.set<double>(row, "age", 1.0), std::invalid_argument);
     EXPECT_THROW(table.set<int>(row, "nope", 1), std::out_of_range);
 }

@@ -5,13 +5,14 @@
 /// Many reader threads run concurrently with a single ingesting writer; the final state must be
 /// consistent and no read may observe a corrupt size.
 
+#include "soatable/concurrent.hpp"
+
 #include <gtest/gtest.h>
 
 #include <atomic>
 #include <thread>
 #include <vector>
 
-#include "soatable/concurrent.hpp"
 #include "soatable/soatable.hpp"
 
 namespace {
@@ -23,7 +24,7 @@ using Table = soatable::soa_table<Tick>;
 
 TEST(ConcurrentTest, SingleThreadReadWrite) {
     soatable::synchronized_table<Table> table;
-    const auto id = table.write([](Table& t) {
+    const auto                          id = table.write([](Table& t) {
         const auto row = t.insert();
         t.assign<Tick>(row, Tick {10.0});
         return row;
@@ -43,12 +44,12 @@ TEST(ConcurrentTest, ConcurrentReadersWithSingleWriter) {
     std::vector<std::jthread> readers;
     for (int r = 0; r < 4; ++r) {
         readers.emplace_back([&] {
-            // Concurrently read the size; record the largest value observed for a main-thread check.
+            // Concurrently read the size; record the largest value observed for a main-thread
+            // check.
             while (!writer_done.load(std::memory_order_relaxed)) {
-                const std::size_t size = table.read([](const Table& t) { return t.size(); });
+                const std::size_t size    = table.read([](const Table& t) { return t.size(); });
                 std::size_t       current = max_size_seen.load(std::memory_order_relaxed);
-                while (size > current &&
-                       !max_size_seen.compare_exchange_weak(current, size)) {
+                while (size > current && !max_size_seen.compare_exchange_weak(current, size)) {
                 }
             }
         });

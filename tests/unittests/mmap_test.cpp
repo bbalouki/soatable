@@ -6,11 +6,12 @@
 /// Verifies a large column round-trips, the mapping is page-aligned (SIMD-friendly), and the normal
 /// table API (sort/erase) works over it.
 
+#include "soatable/mmap.hpp"
+
 #include <gtest/gtest.h>
 
 #include <cstdint>
 
-#include "soatable/mmap.hpp"
 #include "soatable/soatable.hpp"
 
 namespace {
@@ -63,7 +64,9 @@ TEST(MmapTest, SupportsSortAndErase) {
     table.assign<Sample>(c, Sample {2.0});
 
     table.erase(a);
-    table.sort_by_column<Sample>([](const Sample& l, const Sample& r) { return l.value < r.value; });
+    table.sort_by_column<Sample>([](const Sample& l, const Sample& r) {
+        return l.value < r.value;
+    });
 
     const auto column = table.column<Sample>();
     ASSERT_EQ(column.size(), 2U);

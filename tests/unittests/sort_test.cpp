@@ -21,7 +21,7 @@ using soatable_test::Name;
 namespace {
 
 DemoTable make_people() {
-    DemoTable table;
+    DemoTable  table;
     const auto id1 = table.insert();
     table.assign<Name>(id1, "Alice");
     table.assign<Age>(id1, 30);
@@ -84,7 +84,9 @@ TEST(SortTest, MultiColumnTieBreak) {
 
 TEST(SortTest, ParallelSortMatchesSerialResult) {
     DemoTable table = make_people();
-    table.sort_by_column_parallel<Age>([](const Age& a, const Age& b) { return a.value < b.value; });
+    table.sort_by_column_parallel<Age>([](const Age& a, const Age& b) {
+        return a.value < b.value;
+    });
 
     EXPECT_EQ(ages_in_order(table), (std::vector<int> {20, 25, 30}));
 
@@ -101,12 +103,14 @@ TEST(SortTest, ParallelSortMatchesSerialResult) {
 
 TEST(SortTest, ParallelSortHandlesSingleColumnTable) {
     soatable::soa_table<Age> table;
-    const auto id1 = table.insert();
+    const auto               id1 = table.insert();
     table.assign<Age>(id1, 3);
     const auto id2 = table.insert();
     table.assign<Age>(id2, 1);
 
-    table.sort_by_column_parallel<Age>([](const Age& a, const Age& b) { return a.value < b.value; });
+    table.sort_by_column_parallel<Age>([](const Age& a, const Age& b) {
+        return a.value < b.value;
+    });
 
     std::vector<int> ages;
     for (auto [id, age] : table.select<Age>()) {
@@ -117,8 +121,8 @@ TEST(SortTest, ParallelSortHandlesSingleColumnTable) {
 }
 
 TEST(SortTest, ParallelSortLargeTableExercisesConcurrentPath) {
-    // Exceed parallel_sort_threshold so the genuine multi-column concurrent reorder runs, and verify
-    // it produces a fully sorted, internally consistent table.
+    // Exceed parallel_sort_threshold so the genuine multi-column concurrent reorder runs, and
+    // verify it produces a fully sorted, internally consistent table.
     constexpr int row_count = 20000;
     DemoTable     table;
     table.reserve(row_count);
@@ -129,10 +133,12 @@ TEST(SortTest, ParallelSortLargeTableExercisesConcurrentPath) {
         table.assign<Name>(id, "n");
     }
 
-    table.sort_by_column_parallel<Age>([](const Age& a, const Age& b) { return a.value < b.value; });
+    table.sort_by_column_parallel<Age>([](const Age& a, const Age& b) {
+        return a.value < b.value;
+    });
 
-    int  previous = -1;
-    int  seen     = 0;
+    int previous = -1;
+    int seen     = 0;
     for (auto [id, age, name] : table.select<Age, Name>()) {
         EXPECT_TRUE(table.is_valid(id));
         EXPECT_GE(age.get().value, previous);  // Non-decreasing => sorted.

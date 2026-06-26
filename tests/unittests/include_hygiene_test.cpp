@@ -6,11 +6,11 @@
 #define SOATABLE_ENABLE_SSTD_ALIAS
 #include "soatable/soatable.hpp"
 // Include a second time to confirm the include guard makes re-inclusion a no-op.
-#include "soatable/soatable.hpp"
-
 #include <gtest/gtest.h>
 
 #include <cstddef>
+
+#include "soatable/soatable.hpp"
 
 // Defined in include_hygiene_other_tu.cpp; both TUs include the header.
 std::size_t row_count_from_other_tu();
@@ -23,7 +23,7 @@ struct Tag {
 
 TEST(IncludeHygieneTest, SstdAliasResolvesToSoatable) {
     sstd::soa_table<Tag> table;
-    const auto          id = table.insert();
+    const auto           id = table.insert();
     table.assign<Tag>(id, 1);
     EXPECT_EQ(table.get<Tag>(id).value, 1);
 }

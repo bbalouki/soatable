@@ -3,6 +3,8 @@
 /// mean, and dirty-region scans for incremental recompute.
 /// @author Bertin Balouki SIMYELI
 
+#include "soatable/timeseries.hpp"
+
 #include <gtest/gtest.h>
 
 #include <cstdint>
@@ -10,7 +12,6 @@
 #include <vector>
 
 #include "soatable/soatable.hpp"
-#include "soatable/timeseries.hpp"
 
 namespace {
 struct Price {
@@ -24,7 +25,7 @@ using TsTable = soatable::soa_table<Price, soatable::dirty_mask<Field>>;
 
 TEST(TimeSeriesTest, RollingSumTrailingWindow) {
     const std::vector<int> data = {1, 2, 3, 4, 5};
-    const auto sums = soatable::timeseries::rolling_sum(std::span<const int>(data), 3);
+    const auto             sums = soatable::timeseries::rolling_sum(std::span<const int>(data), 3);
     EXPECT_EQ(sums, (std::vector<int> {1, 3, 6, 9, 12}));  // windows: 1,1+2,1+2+3,2+3+4,3+4+5
 }
 
@@ -39,8 +40,8 @@ TEST(TimeSeriesTest, RollingMeanTrailingWindow) {
 }
 
 TEST(TimeSeriesTest, DeltasAreSuccessiveDifferences) {
-    const std::vector<int> data = {10, 13, 9, 20};
-    const auto diffs = soatable::timeseries::deltas(std::span<const int>(data));
+    const std::vector<int> data  = {10, 13, 9, 20};
+    const auto             diffs = soatable::timeseries::deltas(std::span<const int>(data));
     EXPECT_EQ(diffs, (std::vector<int> {0, 3, -4, 11}));
 }
 
@@ -61,7 +62,7 @@ TEST(TimeSeriesTest, RollingMeanColumnProjectsValues) {
 TEST(TimeSeriesTest, ForEachDirtyVisitsAndClearsFlaggedRows) {
     TsTable table;
     for (int i = 0; i < 5; ++i) {
-        const auto              id = table.insert();
+        const auto                  id = table.insert();
         soatable::dirty_mask<Field> mask;
         if (i % 2 == 0) {
             mask.mark_dirty(Field::recompute);

@@ -30,16 +30,16 @@ TEST(ExceptionSafetyTest, MoveOnlyColumnSupportsFullLifecycle) {
 
 TEST(ExceptionSafetyTest, MoveOnlyColumnSurvivesReorder) {
     soatable::soa_table<MoveOnly> table;
-    const auto a = table.insert();
+    const auto                    a = table.insert();
     table.assign<MoveOnly>(a, 3);
     const auto b = table.insert();
     table.assign<MoveOnly>(b, 1);
     const auto c = table.insert();
     table.assign<MoveOnly>(c, 2);
 
-    table.sort_by_column<MoveOnly>(
-        [](const MoveOnly& lhs, const MoveOnly& rhs) { return lhs.value < rhs.value; }
-    );
+    table.sort_by_column<MoveOnly>([](const MoveOnly& lhs, const MoveOnly& rhs) {
+        return lhs.value < rhs.value;
+    });
 
     EXPECT_EQ(table.get<MoveOnly>(a).value, 3);
     EXPECT_EQ(table.get<MoveOnly>(b).value, 1);
@@ -48,9 +48,9 @@ TEST(ExceptionSafetyTest, MoveOnlyColumnSurvivesReorder) {
 
 TEST(ExceptionSafetyTest, FailedAssignLeavesColumnConsistent) {
     soatable::soa_table<ThrowOnNth> table;
-    const auto id0 = table.insert();
-    const auto id1 = table.insert();
-    const auto id2 = table.insert();
+    const auto                      id0 = table.insert();
+    const auto                      id1 = table.insert();
+    const auto                      id2 = table.insert();
 
     ThrowOnNth::construct_budget = 2;  // Third construction throws.
     table.assign<ThrowOnNth>(id0, 10);

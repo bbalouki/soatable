@@ -4,12 +4,13 @@
 ///
 /// Arithmetic combines dimensions correctly, and a quantity is usable as a SoaTable column.
 
+#include "soatable/units.hpp"
+
 #include <gtest/gtest.h>
 
 #include <type_traits>
 
 #include "soatable/soatable.hpp"
-#include "soatable/units.hpp"
 
 namespace u = soatable::units;
 
@@ -23,9 +24,9 @@ TEST(UnitsTest, DivisionProducesVelocityDimension) {
 }
 
 TEST(UnitsTest, MultiplicationCombinesDimensions) {
-    const u::velocity<>   speed {10.0};
-    const u::duration<>   elapsed {3.0};
-    const auto            distance = speed * elapsed;
+    const u::velocity<> speed {10.0};
+    const u::duration<> elapsed {3.0};
+    const auto          distance = speed * elapsed;
 
     static_assert(std::is_same_v<decltype(distance)::dimension_type, u::length_dimension>);
     EXPECT_DOUBLE_EQ(distance.value(), 30.0);
@@ -45,7 +46,7 @@ TEST(UnitsTest, ScalarScaling) {
 
 TEST(UnitsTest, UsableAsColumnType) {
     soatable::soa_table<u::length<>, u::velocity<>> table;
-    const auto id = table.insert();
+    const auto                                      id = table.insert();
     table.assign<u::length<>>(id, u::length<> {12.5});
     table.assign<u::velocity<>>(id, u::velocity<> {3.0});
 

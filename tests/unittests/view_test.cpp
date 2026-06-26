@@ -62,7 +62,7 @@ TEST(ViewTest, ConstViewYieldsReadableValues) {
     table.assign<Age>(id, 7);
 
     const DemoTable& const_table = table;
-    int              sum = 0;
+    int              sum         = 0;
     for (auto [row, age] : const_table.view<Age>()) {
         static_cast<void>(row);
         sum += age.value;

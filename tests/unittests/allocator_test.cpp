@@ -61,7 +61,7 @@ TEST(AllocatorTest, CustomAllocatorIsUsedByColumns) {
 }
 
 TEST(AllocatorTest, PmrTableUsesDefaultMemoryResource) {
-    std::array<std::byte, 8192> buffer {};
+    std::array<std::byte, 8192>         buffer {};
     std::pmr::monotonic_buffer_resource resource(buffer.data(), buffer.size());
     std::pmr::memory_resource* const    previous = std::pmr::get_default_resource();
     std::pmr::set_default_resource(&resource);
@@ -81,7 +81,7 @@ TEST(AllocatorTest, PmrTableUsesDefaultMemoryResource) {
 
 TEST(AllocatorTest, CustomAllocatorTableSupportsFullApi) {
     soatable::custom_soa_table<counting_allocator, Age> table;
-    const auto a = table.insert();
+    const auto                                          a = table.insert();
     table.assign<Age>(a, 5);
     const auto b = table.insert();
     table.assign<Age>(b, 1);

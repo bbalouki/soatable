@@ -21,8 +21,8 @@ struct Name {
 };
 
 constexpr std::size_t tile = 8;
-using TiledTable          = soatable::aosoa_table<tile, Age, Name>;
-using FlatTable           = soatable::soa_table<Age, Name>;
+using TiledTable           = soatable::aosoa_table<tile, Age, Name>;
+using FlatTable            = soatable::soa_table<Age, Name>;
 }  // namespace
 
 TEST(AosoaTest, RowApiMatchesSoa) {
@@ -64,7 +64,7 @@ TEST(AosoaTest, SelectAndSortWork) {
 }
 
 TEST(AosoaTest, ColumnTilesCoverAllValuesInOrder) {
-    TiledTable table;
+    TiledTable    table;
     constexpr int row_count = 20;  // More than two tiles of 8.
     for (int i = 0; i < row_count; ++i) {
         const auto id = table.insert();
@@ -74,7 +74,9 @@ TEST(AosoaTest, ColumnTilesCoverAllValuesInOrder) {
     std::vector<int> flattened;
     for (const std::span<Age> tile_span : table.column_tiles<Age>()) {
         EXPECT_LE(tile_span.size(), tile);
-        EXPECT_EQ(reinterpret_cast<std::uintptr_t>(tile_span.data()) % soatable::simd_alignment, 0U);
+        EXPECT_EQ(
+            reinterpret_cast<std::uintptr_t>(tile_span.data()) % soatable::simd_alignment, 0U
+        );
         for (const Age& age : tile_span) {
             flattened.push_back(age.value);
         }

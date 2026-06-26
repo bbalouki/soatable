@@ -13,7 +13,7 @@ using soatable_test::Age;
 using soatable_test::DemoTable;
 
 TEST(BatchTest, InsertBatchCreatesDistinctRows) {
-    DemoTable table;
+    DemoTable  table;
     const auto ids = table.insert_batch(4);
 
     ASSERT_EQ(ids.size(), 4U);
@@ -24,8 +24,8 @@ TEST(BatchTest, InsertBatchCreatesDistinctRows) {
 }
 
 TEST(BatchTest, AssignBatchFillsColumn) {
-    DemoTable table;
-    const auto ids = table.insert_batch(3);
+    DemoTable              table;
+    const auto             ids  = table.insert_batch(3);
     const std::vector<Age> ages = {Age {10}, Age {20}, Age {30}};
     table.assign_batch<Age>(ids, ages.begin());
 
@@ -36,7 +36,7 @@ TEST(BatchTest, AssignBatchFillsColumn) {
 
 TEST(BatchTest, AssignBatchSkipsInvalidRowsButConsumesInput) {
     DemoTable table;
-    auto ids = table.insert_batch(3);
+    auto      ids = table.insert_batch(3);
     table.erase(ids[1]);  // Middle row invalid; its input value must be consumed but not applied.
 
     const std::vector<Age> ages = {Age {1}, Age {2}, Age {3}};
@@ -48,7 +48,7 @@ TEST(BatchTest, AssignBatchSkipsInvalidRowsButConsumesInput) {
 }
 
 TEST(BatchTest, InsertBatchOfZeroIsNoOp) {
-    DemoTable table;
+    DemoTable  table;
     const auto ids = table.insert_batch(0);
     EXPECT_TRUE(ids.empty());
     EXPECT_TRUE(table.empty());

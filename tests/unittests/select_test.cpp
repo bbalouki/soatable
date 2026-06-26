@@ -16,7 +16,7 @@ using soatable_test::Name;
 using soatable_test::Score;
 
 TEST(SelectTest, RequiredColumnsYieldOnlyFullyPopulatedRows) {
-    DemoTable table;
+    DemoTable  table;
     const auto id1 = table.insert();
     table.assign<Name>(id1, "Alice");
     table.assign<Age>(id1, 30);
@@ -35,7 +35,7 @@ TEST(SelectTest, RequiredColumnsYieldOnlyFullyPopulatedRows) {
 }
 
 TEST(SelectTest, OptionalColumnsAreIncludedWhenAbsent) {
-    DemoTable table;
+    DemoTable  table;
     const auto id1 = table.insert();
     table.assign<Name>(id1, "Alice");
     table.assign<Age>(id1, 30);
@@ -58,7 +58,7 @@ TEST(SelectTest, OptionalColumnsAreIncludedWhenAbsent) {
 }
 
 TEST(SelectTest, AllOptionalSelectIteratesEveryAliveRow) {
-    DemoTable table;
+    DemoTable  table;
     const auto id1 = table.insert();
     table.assign<Age>(id1, 1);
     const auto id2 = table.insert();  // No columns assigned at all.
@@ -74,7 +74,7 @@ TEST(SelectTest, AllOptionalSelectIteratesEveryAliveRow) {
 }
 
 TEST(SelectTest, AbsentDriverColumnYieldsNothing) {
-    DemoTable table;
+    DemoTable  table;
     const auto id = table.insert();
     table.assign<Name>(id, "Alice");
 
@@ -88,7 +88,7 @@ TEST(SelectTest, AbsentDriverColumnYieldsNothing) {
 }
 
 TEST(SelectTest, SelectMutatesUnderlyingColumn) {
-    DemoTable table;
+    DemoTable  table;
     const auto id = table.insert();
     table.assign<Age>(id, 10);
 
@@ -100,12 +100,12 @@ TEST(SelectTest, SelectMutatesUnderlyingColumn) {
 }
 
 TEST(SelectTest, ConstSelectYieldsConstReferences) {
-    DemoTable table;
+    DemoTable  table;
     const auto id = table.insert();
     table.assign<Age>(id, 42);
 
     const DemoTable& const_table = table;
-    int sum = 0;
+    int              sum         = 0;
     for (auto [row, age] : const_table.select<Age>()) {
         static_cast<void>(row);
         sum += age.get().value;
@@ -114,7 +114,7 @@ TEST(SelectTest, ConstSelectYieldsConstReferences) {
 }
 
 TEST(SelectTest, RowsIterationVisitsEveryAliveRow) {
-    DemoTable table;
+    DemoTable  table;
     const auto id1 = table.insert();
     const auto id2 = table.insert();
     table.erase(id1);

@@ -17,7 +17,7 @@ struct Velocity {
 
 int main() {
     soatable::soa_table<Position, Velocity> table;
-    const auto                             id = table.insert();
+    const auto                              id = table.insert();
     table.assign<Position>(id, Position {1.0});
     table.assign<Velocity>(id, Velocity {2.0});
 
@@ -36,9 +36,9 @@ int main() {
     }
     total += static_cast<double>(table.row_indices<Position>().size());
 
-    table.sort_by_column<Position>(
-        [](const Position& lhs, const Position& rhs) { return lhs.value < rhs.value; }
-    );
+    table.sort_by_column<Position>([](const Position& lhs, const Position& rhs) {
+        return lhs.value < rhs.value;
+    });
     table.erase(id);
 
     return total > 0.0 ? 0 : 0;

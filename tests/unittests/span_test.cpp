@@ -18,7 +18,7 @@ using soatable_test::DemoTable;
 using soatable_test::Name;
 
 TEST(SpanTest, ColumnSpanCoversDenseValues) {
-    DemoTable table;
+    DemoTable  table;
     const auto a = table.insert();
     table.assign<Age>(a, 1);
     const auto b = table.insert();
@@ -29,14 +29,14 @@ TEST(SpanTest, ColumnSpanCoversDenseValues) {
     const std::span<Age> ages = table.column<Age>();
     EXPECT_EQ(ages.size(), 2U);
 
-    const int sum = std::accumulate(
-        ages.begin(), ages.end(), 0, [](int acc, const Age& age) { return acc + age.value; }
-    );
+    const int sum = std::accumulate(ages.begin(), ages.end(), 0, [](int acc, const Age& age) {
+        return acc + age.value;
+    });
     EXPECT_EQ(sum, 3);
 }
 
 TEST(SpanTest, MutationThroughSpanIsVisibleInTable) {
-    DemoTable table;
+    DemoTable  table;
     const auto id = table.insert();
     table.assign<Age>(id, 10);
 
@@ -48,7 +48,7 @@ TEST(SpanTest, MutationThroughSpanIsVisibleInTable) {
 }
 
 TEST(SpanTest, RowIndicesMapValuesBackToHandles) {
-    DemoTable table;
+    DemoTable  table;
     const auto a = table.insert();
     table.assign<Age>(a, 5);
     const auto b = table.insert();
@@ -66,7 +66,7 @@ TEST(SpanTest, RowIndicesMapValuesBackToHandles) {
 }
 
 TEST(SpanTest, EmptyColumnYieldsEmptySpan) {
-    DemoTable table;
+    DemoTable  table;
     const auto id = table.insert();
     table.assign<Name>(id, "x");
 
@@ -75,7 +75,7 @@ TEST(SpanTest, EmptyColumnYieldsEmptySpan) {
 }
 
 TEST(SpanTest, ConstTableYieldsConstSpan) {
-    DemoTable table;
+    DemoTable  table;
     const auto id = table.insert();
     table.assign<Age>(id, 7);
 
@@ -99,7 +99,7 @@ TEST(SpanTest, ColumnStorageIsSimdOverAligned) {
 }
 
 TEST(SpanTest, MakeRowIdRejectsDeadIndex) {
-    DemoTable table;
+    DemoTable  table;
     const auto id = table.insert();
     table.erase(id);
 

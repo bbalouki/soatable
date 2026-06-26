@@ -22,8 +22,8 @@ using soatable_test::Name;
 namespace {
 
 struct ModelRow {
-    soatable::row_id    id {};
-    std::optional<int>  age;
+    soatable::row_id   id {};
+    std::optional<int> age;
 };
 
 using Table = soatable::soa_table<Age, Name>;
@@ -53,9 +53,9 @@ void verify_against_model(const Table& table, const std::vector<ModelRow>& model
 }  // namespace
 
 TEST(InvariantTest, RandomizedOperationSequencePreservesConsistency) {
-    Table                  table;
-    std::vector<ModelRow>  model;
-    std::mt19937           rng {12345U};  // Fixed seed: deterministic, reproducible.
+    Table                 table;
+    std::vector<ModelRow> model;
+    std::mt19937          rng {12345U};  // Fixed seed: deterministic, reproducible.
 
     constexpr int iterations = 3000;
     for (int step = 0; step < iterations; ++step) {

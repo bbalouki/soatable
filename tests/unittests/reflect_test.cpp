@@ -3,11 +3,12 @@
 /// today and resolves to the same type as the explicit type-list API.
 /// @author Bertin Balouki SIMYELI
 
+#include "soatable/reflect.hpp"
+
 #include <gtest/gtest.h>
 
 #include <type_traits>
 
-#include "soatable/reflect.hpp"
 #include "soatable/soatable.hpp"
 
 namespace {
@@ -29,8 +30,9 @@ template <>
 struct soatable::columns_of<Particle> : soatable::column_list<PosX, PosY, Mass> {};
 
 TEST(ReflectTest, TableForResolvesToExplicitTypeList) {
-    static_assert(std::is_same_v<
-                  soatable::table_for<Particle>, soatable::soa_table<PosX, PosY, Mass>>);
+    static_assert(
+        std::is_same_v<soatable::table_for<Particle>, soatable::soa_table<PosX, PosY, Mass>>
+    );
 }
 
 TEST(ReflectTest, TableForIsUsable) {

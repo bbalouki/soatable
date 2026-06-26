@@ -3,13 +3,14 @@
 /// AoSoA storage, and cross-column row-wise assign_from.
 /// @author Bertin Balouki SIMYELI
 
+#include "soatable/compute.hpp"
+
 #include <gtest/gtest.h>
 
 #include <cstdint>
 #include <span>
 #include <vector>
 
-#include "soatable/compute.hpp"
 #include "soatable/soatable.hpp"
 
 namespace {
@@ -49,10 +50,9 @@ TEST(ComputeTest, TransformColumnInPlaceSoa) {
     }
     soatable::compute::transform_column<Price>(book, [](Price p) { return Price {p.value + 1.0}; });
 
-    const double total =
-        soatable::compute::reduce_column<Price>(book, 0.0, [](double acc, const Price& p) {
-            return acc + p.value;
-        });
+    const double total = soatable::compute::reduce_column<Price>(
+        book, 0.0, [](double acc, const Price& p) { return acc + p.value; }
+    );
     EXPECT_DOUBLE_EQ(total, 1.0 + 2.0 + 3.0 + 4.0 + 5.0);
 }
 
@@ -69,16 +69,15 @@ TEST(ComputeTest, ColumnOpsWorkOnTiledStorage) {
     });
     EXPECT_EQ(sum, 2 * (0 + 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9));
 
-    const auto big = soatable::compute::count_column_if<Qty>(book, [](const Qty& q) {
-        return q.value >= 10;
-    });
+    const auto big =
+        soatable::compute::count_column_if<Qty>(book, [](const Qty& q) { return q.value >= 10; });
     EXPECT_EQ(big, 5U);  // doubled values 10,12,14,16,18
 }
 
 TEST(ComputeTest, TransformColumnParallelMatchesSerial) {
     // Exceed parallel_compute_threshold so the concurrent chunk path runs.
     soatable::chunked_soa_table<1024, Qty> chunked;
-    constexpr int row_count = 40000;
+    constexpr int                          row_count = 40000;
     for (int i = 0; i < row_count; ++i) {
         const auto id = chunked.insert();
         chunked.assign<Qty>(id, Qty {i});
@@ -174,10 +173,9 @@ TEST(ComputeTest, BroadcastColumnBiasAcrossTiles) {
         return Price {p.value + s};
     });
 
-    const double total =
-        soatable::compute::reduce_column<Price>(book, 0.0, [](double acc, const Price& p) {
-            return acc + p.value;
-        });
+    const double total = soatable::compute::reduce_column<Price>(
+        book, 0.0, [](double acc, const Price& p) { return acc + p.value; }
+    );
     EXPECT_DOUBLE_EQ(total, (0 + 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9) + 10 * 100.0);
 }
 
@@ -188,17 +186,18 @@ TEST(ComputeTest, TransformColumnIfAcrossTiles) {
         book.assign<Qty>(id, Qty {i});
     }
     soatable::compute::transform_column_if<Qty>(
-        book, [](const Qty& q) { return q.value % 2 == 0; }, [](Qty q) { return Qty {q.value + 100}; }
+        book,
+        [](const Qty& q) { return q.value % 2 == 0; },
+        [](Qty q) { return Qty {q.value + 100}; }
     );
 
-    const auto biased = soatable::compute::count_column_if<Qty>(book, [](const Qty& q) {
-        return q.value >= 100;
-    });
+    const auto biased =
+        soatable::compute::count_column_if<Qty>(book, [](const Qty& q) { return q.value >= 100; });
     EXPECT_EQ(biased, 5U);  // even values 0,2,4,6,8
 }
 
 TEST(ComputeTest, AssignFromOnlyTouchesRowsWithAllInputs) {
-    Book book;
+    Book       book;
     const auto both = book.insert();
     book.assign<Price>(both, Price {2.0});
     book.assign<Qty>(both, Qty {3});

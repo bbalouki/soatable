@@ -23,7 +23,7 @@ TEST(RowHandleTest, DefaultHandleIsInvalid) {
 }
 
 TEST(RowHandleTest, BoundHandleAssignsAndReads) {
-    DemoTable table;
+    DemoTable  table;
     DemoHandle handle {table.insert(), table};
     ASSERT_TRUE(handle.is_valid());
 
@@ -36,7 +36,7 @@ TEST(RowHandleTest, BoundHandleAssignsAndReads) {
 }
 
 TEST(RowHandleTest, UnassignAndEraseThroughHandle) {
-    DemoTable table;
+    DemoTable  table;
     DemoHandle handle {table.insert(), table};
     handle.assign<Age>(1);
     handle.unassign<Age>();
@@ -53,7 +53,7 @@ TEST(RowHandleTest, UnboundHandleThrowsOnAccess) {
 }
 
 TEST(RowHandleTest, ConstHandleReadsConstReference) {
-    DemoTable table;
+    DemoTable  table;
     DemoHandle handle {table.insert(), table};
     handle.assign<Age>(99);
 
