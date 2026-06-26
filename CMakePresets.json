@@ -9,12 +9,12 @@
     {
       "name": "base",
       "hidden": true,
-      "binaryDir": "${sourceDir}/build/${presetName}",
+      "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "SOATABLE_BUILD_TESTS": "ON",
         "SOATABLE_BUILD_EXAMPLES": "ON",
-        "SOATABLE_BUILD_BENCHMARKS": "OFF"
+        "SOATABLE_APPLY_CLANG_TIDY_GLOBALY": "ON",
+        "SOATABLE_APPLY_FORMATING": "ON"
       }
     },
     {
