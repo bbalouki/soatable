@@ -33,14 +33,10 @@ using SensorTable = soatable::soa_table<Temperature, Pressure, RegionId>;
 constexpr double temperature_value(std::size_t i) {
     return static_cast<double>((i * 48271U) % 1000U);
 }
-constexpr double pressure_value(std::size_t i) {
-    return static_cast<double>((i * 16807U) % 1000U);
-}
+constexpr double pressure_value(std::size_t i) { return static_cast<double>((i * 16807U) % 1000U); }
 
 // Build a table of the given size with the given per-column presence probabilities (fixed seed).
-SensorTable build_table(
-    std::size_t row_count, double temp_p, double pressure_p, double region_p
-) {
+SensorTable build_table(std::size_t row_count, double temp_p, double pressure_p, double region_p) {
     SensorTable table;
     table.reserve(row_count);
 
@@ -111,13 +107,13 @@ static void BM_SortByColumn(benchmark::State& state) {
     bool              ascending = true;
     for (auto _ : state) {
         if (ascending) {
-            table.sort_by_column<Temperature>(
-                [](const Temperature& a, const Temperature& b) { return a.celsius < b.celsius; }
-            );
+            table.sort_by_column<Temperature>([](const Temperature& a, const Temperature& b) {
+                return a.celsius < b.celsius;
+            });
         } else {
-            table.sort_by_column<Temperature>(
-                [](const Temperature& a, const Temperature& b) { return a.celsius > b.celsius; }
-            );
+            table.sort_by_column<Temperature>([](const Temperature& a, const Temperature& b) {
+                return a.celsius > b.celsius;
+            });
         }
         ascending = !ascending;
         benchmark::ClobberMemory();
@@ -162,12 +158,12 @@ BENCHMARK(BM_SoaTableSelect)->Arg(100'000)->Arg(250'000);
 
 static void BM_AoSBranchScan(benchmark::State& state) {
     struct AosRecord {
-        bool   has_temperature = false;
-        bool   has_pressure    = false;
-        bool   has_region      = false;
-        double celsius         = 0.0;
-        double kpa             = 0.0;
-        std::uint32_t region   = 0;
+        bool          has_temperature = false;
+        bool          has_pressure    = false;
+        bool          has_region      = false;
+        double        celsius         = 0.0;
+        double        kpa             = 0.0;
+        std::uint32_t region          = 0;
     };
 
     const std::size_t      row_count = static_cast<std::size_t>(state.range(0));
@@ -308,7 +304,7 @@ BENCHMARK(BM_HandRolledSoAScan)->Arg(100'000)->Arg(250'000);
 // A dense 2-column select, contiguous storage vs 1024-element tiles, to show the layout cost of a
 // full-column scan is comparable while tiled storage bounds reallocation on growth.
 static void BM_SelectSoaDense(benchmark::State& state) {
-    const std::size_t                    row_count = static_cast<std::size_t>(state.range(0));
+    const std::size_t                          row_count = static_cast<std::size_t>(state.range(0));
     soatable::soa_table<Temperature, Pressure> table;
     table.reserve(row_count);
     for (std::size_t i = 0; i < row_count; ++i) {
@@ -327,7 +323,7 @@ static void BM_SelectSoaDense(benchmark::State& state) {
 BENCHMARK(BM_SelectSoaDense)->Arg(250'000);
 
 static void BM_SelectAosoaDense(benchmark::State& state) {
-    const std::size_t                              row_count = static_cast<std::size_t>(state.range(0));
+    const std::size_t row_count = static_cast<std::size_t>(state.range(0));
     soatable::aosoa_table<1024, Temperature, Pressure> table;
     for (std::size_t i = 0; i < row_count; ++i) {
         const auto row = table.insert();
@@ -346,16 +342,16 @@ BENCHMARK(BM_SelectAosoaDense)->Arg(250'000);
 
 // --- Compute throughput -----------------------------------------------------------------------
 static void BM_ComputeTransformColumn(benchmark::State& state) {
-    const std::size_t                    row_count = static_cast<std::size_t>(state.range(0));
-    soatable::soa_table<Temperature>     table;
+    const std::size_t                row_count = static_cast<std::size_t>(state.range(0));
+    soatable::soa_table<Temperature> table;
     table.reserve(row_count);
     for (std::size_t i = 0; i < row_count; ++i) {
         table.assign<Temperature>(table.insert(), Temperature {temperature_value(i)});
     }
     for (auto _ : state) {
-        soatable::compute::transform_column<Temperature>(
-            table, [](Temperature t) { return Temperature {t.celsius + 1.0}; }
-        );
+        soatable::compute::transform_column<Temperature>(table, [](Temperature t) {
+            return Temperature {t.celsius + 1.0};
+        });
         benchmark::ClobberMemory();
     }
     state.SetItemsProcessed(state.iterations() * state.range(0));
