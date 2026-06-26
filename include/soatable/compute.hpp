@@ -195,10 +195,15 @@ void transform_strided(std::span<T> values, std::size_t stride, UnaryOp op) {
 /// @param table The table.
 /// @param scalar The scalar operand.
 /// @param op The combining operation (defaults to addition).
-template <typename T, typename Storage, typename... Columns, typename Scalar,
-          typename BinaryOp = std::plus<>>
-void broadcast_column(basic_soa_table<Storage, Columns...>& table, const Scalar& scalar,
-                      BinaryOp op = {}) {
+template <
+    typename T,
+    typename Storage,
+    typename... Columns,
+    typename Scalar,
+    typename BinaryOp = std::plus<>>
+void broadcast_column(
+    basic_soa_table<Storage, Columns...>& table, const Scalar& scalar, BinaryOp op = {}
+) {
     for (std::span<T> tile : table.template column_tiles<T>()) {
         compute::broadcast(tile, scalar, op);
     }
@@ -227,8 +232,8 @@ inline constexpr std::size_t parallel_compute_threshold = 1U << 14;
 /// @tparam T The column type.
 /// @param table The table.
 /// @param func A callable taking a std::span<T> over one chunk.
-/// @note A single whole-column span for soa_layout; one span per tile for aosoa_layout. The hook for
-/// custom per-chunk kernels.
+/// @note A single whole-column span for soa_layout; one span per tile for aosoa_layout. The hook
+/// for custom per-chunk kernels.
 template <typename T, typename Storage, typename... Columns, typename Func>
 void for_each_chunk(basic_soa_table<Storage, Columns...>& table, Func func) {
     for (std::span<T> chunk : table.template column_tiles<T>()) {
@@ -259,7 +264,8 @@ void transform_column_parallel(basic_soa_table<Storage, Columns...>& table, Unar
         return;
     }
 
-    // Dispatch all but the first chunk to async tasks; the caller transforms the first concurrently.
+    // Dispatch all but the first chunk to async tasks; the caller transforms the first
+    // concurrently.
     std::vector<std::future<void>> futures;
     futures.reserve(chunks.size() - 1);
     for (std::size_t i = 1; i < chunks.size(); ++i) {

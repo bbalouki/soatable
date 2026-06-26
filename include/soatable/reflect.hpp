@@ -30,7 +30,8 @@ struct column_list {
 };
 
 /// @brief Maps a user struct to its column list. Specialize this (deriving from column_list) to use
-/// table_for<Struct> without reflection; the specialization becomes unnecessary once reflection ships.
+/// table_for<Struct> without reflection; the specialization becomes unnecessary once reflection
+/// ships.
 /// @tparam Struct The user struct identifying a schema.
 template <typename Struct>
 struct columns_of;

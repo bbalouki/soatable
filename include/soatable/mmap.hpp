@@ -69,9 +69,8 @@ struct mmap_allocator {
             throw std::bad_alloc();
         }
 #else
-        void* ptr = ::mmap(
-            nullptr, bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0
-        );
+        void* ptr =
+            ::mmap(nullptr, bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         if (ptr == MAP_FAILED) {
             throw std::bad_alloc();
         }
