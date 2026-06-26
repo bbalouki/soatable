@@ -8,10 +8,9 @@
 #include <cmath>
 #include <cstdint>
 
+#include "output.hpp"
 #include "soatable/compute.hpp"
 #include "soatable/soatable.hpp"
-
-#include "output.hpp"
 
 namespace {
 struct Signal {
@@ -37,9 +36,9 @@ int main() {
     }
 
     // energy = signal^2, computed row-wise, then summed via a zero-copy span reduction.
-    soatable::compute::assign_from<Energy, Signal>(
-        data, [](const Signal& s) { return Energy {s.value * s.value}; }
-    );
+    soatable::compute::assign_from<Energy, Signal>(data, [](const Signal& s) {
+        return Energy {s.value * s.value};
+    });
     const double total_energy = soatable::compute::reduce_column<Energy>(
         data, 0.0, [](double acc, const Energy& e) { return acc + e.value; }
     );

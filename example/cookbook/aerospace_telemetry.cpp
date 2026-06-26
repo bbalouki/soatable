@@ -7,15 +7,14 @@
 
 #include <cstdint>
 
-#include "soatable/soatable.hpp"
-
 #include "output.hpp"
+#include "soatable/soatable.hpp"
 
 namespace {
 enum class Subsystem : std::uint32_t {
-    avionics = 1U << 0U,
+    avionics   = 1U << 0U,
     propulsion = 1U << 1U,
-    thermal = 1U << 2U,
+    thermal    = 1U << 2U,
 };
 
 struct Altitude {
@@ -52,7 +51,8 @@ int main() {
     for (auto [id, altitude, status] : frames.select<Altitude, Status>()) {
         static_cast<void>(id);
         OUT_PRINTLN(
-            "altitude {:.1f} m, thermal dirty: {}", altitude.get().metres.get(),
+            "altitude {:.1f} m, thermal dirty: {}",
+            altitude.get().metres.get(),
             status.get().flags.is_dirty(Subsystem::thermal)
         );
     }

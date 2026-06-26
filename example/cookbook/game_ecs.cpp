@@ -7,9 +7,8 @@
 
 #include <string>
 
-#include "soatable/soatable.hpp"
-
 #include "output.hpp"
+#include "soatable/soatable.hpp"
 
 namespace {
 struct Position {
@@ -53,9 +52,7 @@ int main() {
 
     for (auto [id, name, position] : world.select<Name, Position>()) {
         static_cast<void>(id);
-        OUT_PRINTLN(
-            "{} at ({:.1f}, {:.1f})", name.get().value, position.get().x, position.get().y
-        );
+        OUT_PRINTLN("{} at ({:.1f}, {:.1f})", name.get().value, position.get().x, position.get().y);
     }
     return 0;
 }

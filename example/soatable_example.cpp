@@ -2,9 +2,10 @@
 /// @brief A guided tour exercising most of SoaTable's headers in one runnable program.
 /// @author Bertin Balouki SIMYELI
 ///
-/// Walks through the container basics, reference-semantic views, the non-throwing accessor, zero-copy
-/// spans and validity bitmaps, the compute layer, query aggregation, binary serialization round-trip,
-/// tiled (AoSoA) storage, dimensional units, time-series helpers, and the runtime dynamic table.
+/// Walks through the container basics, reference-semantic views, the non-throwing accessor,
+/// zero-copy spans and validity bitmaps, the compute layer, query aggregation, binary serialization
+/// round-trip, tiled (AoSoA) storage, dimensional units, time-series helpers, and the runtime
+/// dynamic table.
 
 #include <cstdint>
 #include <span>
@@ -69,9 +70,9 @@ int main() {
     }
 
     // 2. Compute: notional = price * qty over the Price/Qty join, then a span reduction.
-    soatable::compute::assign_from<Notional, Price, Qty>(
-        book, [](const Price& p, const Qty& q) { return Notional {p.value * q.value}; }
-    );
+    soatable::compute::assign_from<Notional, Price, Qty>(book, [](const Price& p, const Qty& q) {
+        return Notional {p.value * q.value};
+    });
     const double gross = soatable::compute::reduce_column<Notional>(
         book, 0.0, [](double acc, const Notional& n) { return acc + n.value; }
     );
@@ -88,8 +89,9 @@ int main() {
 
     // 4. Zero-copy span + validity bitmap.
     const std::span<const Price> prices = book.column<Price>();
-    OUT_PRINTLN("== span == {} prices, {} rows priced", prices.size(),
-                book.validity<Price>().count());
+    OUT_PRINTLN(
+        "== span == {} prices, {} rows priced", prices.size(), book.validity<Price>().count()
+    );
 
     // 5. Serialization round-trip over a trivially-copyable schema.
     soatable::soa_table<Price, Qty> pod;
@@ -102,8 +104,12 @@ int main() {
     const auto                      bytes = soatable::save(pod);
     soatable::soa_table<Price, Qty> restored;
     const auto                      status = soatable::load(restored, bytes);
-    OUT_PRINTLN("== serialize == {} bytes, restored {} rows, ok={}", bytes.size(), restored.size(),
-                status == soatable::serialize_status::ok);
+    OUT_PRINTLN(
+        "== serialize == {} bytes, restored {} rows, ok={}",
+        bytes.size(),
+        restored.size(),
+        status == soatable::serialize_status::ok
+    );
 
     // 6. Tiled (AoSoA) storage with per-chunk aligned spans.
     soatable::aosoa_table<4, Price> tiled;
@@ -113,8 +119,8 @@ int main() {
     OUT_PRINTLN("== aosoa == {} price chunks", tiled.column_tiles<Price>().size());
 
     // 7. Dimensional units: velocity = distance / time, checked at compile time.
-    namespace un      = soatable::units;
-    const auto speed  = un::length<> {100.0} / un::duration<> {4.0};
+    namespace un     = soatable::units;
+    const auto speed = un::length<> {100.0} / un::duration<> {4.0};
     OUT_PRINTLN("== units == speed {:.1f} (length/time)", speed.value());
 
     // 8. Time-series rolling mean over the price column's dense order.
@@ -129,8 +135,11 @@ int main() {
     dyn.set_metadata("altitude", "unit", "metres");
     const auto sample = dyn.insert_row();
     dyn.set<double>(sample, "altitude", 1280.0);
-    OUT_PRINTLN("== dynamic == altitude {:.0f} {}", *dyn.get<double>(sample, "altitude"),
-                *dyn.get_metadata("altitude", "unit"));
+    OUT_PRINTLN(
+        "== dynamic == altitude {:.0f} {}",
+        *dyn.get<double>(sample, "altitude"),
+        *dyn.get_metadata("altitude", "unit")
+    );
 
     return 0;
 }

@@ -8,11 +8,10 @@
 #include <cstdint>
 #include <string>
 
+#include "output.hpp"
 #include "soatable/compute.hpp"
 #include "soatable/query.hpp"
 #include "soatable/soatable.hpp"
-
-#include "output.hpp"
 
 namespace {
 struct Symbol {
@@ -50,8 +49,7 @@ int main() {
 
     // Total notional volume per symbol.
     const auto volume = soatable::query::group_sum<Symbol, Notional>(
-        ticks, [](const Symbol& s) { return s.value; },
-        [](const Notional& n) { return n.value; }
+        ticks, [](const Symbol& s) { return s.value; }, [](const Notional& n) { return n.value; }
     );
     for (const auto& [symbol, total] : volume) {
         OUT_PRINTLN("{}: notional volume {:.2f}", symbol, total);
@@ -63,7 +61,8 @@ int main() {
              return trade.template get<Notional>().value > 10000.0;
          })) {
         OUT_PRINTLN(
-            "{} notional {:.2f}", row.template get<Symbol>().value,
+            "{} notional {:.2f}",
+            row.template get<Symbol>().value,
             row.template get<Notional>().value
         );
     }
