@@ -162,38 +162,36 @@ function(apply_formating USE_PER_FILE_LOGIC PATH)
 
     file(GLOB_RECURSE SOURCES "${PATH}/*.cpp")
     file(GLOB_RECURSE HEADERS "${PATH}/*.h" "${PATH}/*.hpp")
-    list(APPEND ALL_FILES ${SOURCES} ${HEADERS})
+    set(ALL_FILES ${SOURCES} ${HEADERS})
+
+    if(NOT TARGET format)
+        add_custom_target(format COMMENT "Formatting files with clang-format ...")
+        message(STATUS "Add 'format' target. Run: cmake --build \"${CMAKE_BINARY_DIR}\" --target format")
+    endif()
 
     if(NOT ALL_FILES)
-        add_custom_target(format COMMENT "No source files found to format.")
         return()
     endif()
 
     if (USE_PER_FILE_LOGIC)
-        message(STATUS "Add 'format' target (per-file mode for large projects)")
-        add_custom_target(
-            format
-            COMMENT "Formatting files one-by-one with clang-format ..."
-        )
         foreach(file ${ALL_FILES})
             add_custom_command(
                 TARGET format
-                PRE_BUILD
+                POST_BUILD
                 COMMAND ${CLANG_FORMAT_EXE} -i "${file}"
                 COMMENT "Formatting ${file}"
                 WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
             )
         endforeach()
     else()
-        message(STATUS "Add 'format' target (single command mode)")
-        add_custom_target(
-            format
-            COMMENT "Formatting all files at once with clang-format ..."
+        add_custom_command(
+            TARGET format
+            POST_BUILD
             COMMAND ${CLANG_FORMAT_EXE} -i ${ALL_FILES}
+            COMMENT "Formatting files in ${PATH} with clang-format ..."
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         )
     endif()
-    message(STATUS "To format your code, run: cmake --build . --target format")
 
 endfunction()
 
