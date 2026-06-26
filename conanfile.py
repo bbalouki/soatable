@@ -18,7 +18,13 @@ class SoaTableConan(ConanFile):
 
     settings = "os", "arch", "compiler", "build_type"
     no_copy_source = True
-    exports_sources = "include/*", "LICENSE"
+    exports_sources = (
+        "include/*",
+        "LICENSE",
+        "tools/visualizers/*.natvis",
+        "tools/visualizers/*.py",
+        "tools/visualizers/README.md",
+    )
 
     def package_id(self):
         # Header-only: the package is identical across configurations.
@@ -40,11 +46,20 @@ class SoaTableConan(ConanFile):
             src=self.source_folder,
             dst=os.path.join(self.package_folder, "licenses"),
         )
+        # Ship the debugger visualizers so Conan users receive them too; they are opt-in developer
+        # aids that the consumer wires into their debugger (see tools/visualizers/README.md).
+        copy(
+            self,
+            "*",
+            src=os.path.join(self.source_folder, "tools", "visualizers"),
+            dst=os.path.join(self.package_folder, "res", "soatable", "visualizers"),
+            excludes=("__pycache__/*",),
+        )
 
     def package_info(self):
         self.cpp_info.bindirs = []
         self.cpp_info.libdirs = []
+        self.cpp_info.resdirs = ["res"]
         self.cpp_info.set_property("cmake_file_name", "soatable")
         self.cpp_info.set_property("cmake_target_name", "soatable::soatable")
-        # SoaTable requires C++23 from consumers.
         self.cpp_info.cppstd = "23"
