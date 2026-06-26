@@ -1,24 +1,3 @@
-# General Best Practices
-
-## Testing Philosophy
-
-- Use real implementations; only mock external dependencies (LLM APIs, cloud services).
-- Test public interface behavior, not implementation details, keeps tests resilient to refactoring.
-- Tests must be fast, isolated, and have descriptive names; cover edge cases and error conditions.
-- Location: `tests/unittests/` following source structure.
-
-## Comments
-
-- Explain the _why_, not the _what_. Well-named code is self-documenting.
-- Write comments as complete sentences; block comments begin with `# ` (space after hash).
-
-## Versioning & Breaking Changes
-
-- Follow Semantic Versioning 2.0.0 (`MAJOR.MINOR.PATCH`).
-- A breaking change is any backward-incompatible modification to the public API, including data schemas, CLI, and server communication formats.
-
----
-
 # Modern C++ Best Practices
 
 ## Language & Compiler
@@ -91,9 +70,17 @@
 - Run tests under AddressSanitizer and UndefinedBehaviourSanitizer; use fuzz testing for parsers and untrusted input.
 - Enforce clang-format in CI; use clang-tidy with `cppcoreguidelines-*`, `modernize-*`, `readability-*` checks.
 - Use debuggers (GDB, LLDB) actively rather than `std::cout`; use `compile_commands.json` for accurate tooling.
+- Use real implementations; only mock external dependencies (LLM APIs, cloud services).
+- Test public interface behavior, not implementation details, keeps tests resilient to refactoring.
+- Tests must be fast, isolated, and have descriptive names; cover edge cases and error conditions.
+- Location: `tests/unittests/` following source structure.
 
 ## CI/CD & Maintenance
 
+## Versioning & Breaking Changes
+
+- Follow Semantic Versioning 2.0.0 (`MAJOR.MINOR.PATCH`).
+- A breaking change is any backward-incompatible modification to the public API, including data schemas, CLI, and server communication formats.
 - CI must build and test before merging; build across GCC, Clang, and MSVC.
 - Document the _why_, not the _what_; use Doxygen (`///`) for API docs and `//` for implementation notes.
 - Keep public API surface minimal; mark deprecated APIs with `[[deprecated("reason")]]` and include a migration path.
