@@ -94,8 +94,8 @@ foreach(case IN LISTS SOATABLE_COMPILE_FAIL_CASES)
     )
     add_test(
         NAME compile_fail_${case}
-        COMMAND ${CMAKE_COMMAND} build ${CMAKE_BINARY_DIR}
-                target soatable_compile_fail_${case} config $<CONFIG>
+        COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR}
+                --target soatable_compile_fail_${case} --config $<CONFIG>
     )
     set_tests_properties(compile_fail_${case} PROPERTIES WILL_FAIL TRUE)
 endforeach()
