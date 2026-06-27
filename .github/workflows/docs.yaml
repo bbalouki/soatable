@@ -20,9 +20,6 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    # Enable Pages with the "GitHub Actions" source programmatically so deploy-pages can create a
-    # deployment; without this the site must be switched to GitHub Actions in repo settings first,
-    # otherwise createPagesDeployment returns 404 ("Ensure GitHub Pages has been enabled").
     - name: Setup Pages
       uses: actions/configure-pages@v5
       with:
