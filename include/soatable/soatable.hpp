@@ -42,11 +42,12 @@
 
 // std::expected (C++23) is an optional enhancement: where the standard library does not provide it
 // the feature-detected get_expected() accessors are simply not declared, and try_get<T>() remains
-// the always-available non-throwing accessor.
+// the always-available non-throwing accessor. Define SOATABLE_DISABLE_EXPECTED to force the
+// fallback even on a capable toolchain.
 #if __has_include(<expected>)
 #include <expected>
 #endif
-#if defined(__cpp_lib_expected) && __cpp_lib_expected >= 202202L
+#if !defined(SOATABLE_DISABLE_EXPECTED) && defined(__cpp_lib_expected) && __cpp_lib_expected >= 202202L
 #define SOATABLE_HAS_EXPECTED 1
 #else
 #define SOATABLE_HAS_EXPECTED 0
