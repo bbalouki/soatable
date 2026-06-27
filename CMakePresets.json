@@ -11,6 +11,7 @@
       "hidden": true,
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
+        "SOATABLE_CXX_STANDARD": "23",
         "SOATABLE_BUILD_TESTS": "ON",
         "SOATABLE_BUILD_EXAMPLES": "ON",
         "SOATABLE_APPLY_CLANG_TIDY_GLOBALY": "ON",
