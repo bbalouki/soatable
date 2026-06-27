@@ -15,9 +15,6 @@ permissions:
   id-token: write
 
 jobs:
-  # Build and deploy are separate jobs so that re-running a failed deploy does not re-run the
-  # upload step. Re-uploading would attach a second "github-pages" artifact to the same run and
-  # make actions/deploy-pages fail with "Multiple artifacts named github-pages".
   build:
     runs-on: ubuntu-latest
     steps:
