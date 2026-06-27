@@ -27,9 +27,11 @@ int main() {
         total += position.value + velocity.value;
     }
 
+#if SOATABLE_HAS_EXPECTED
     if (const auto found = table.get_expected<Position>(id); found.has_value()) {
         total += found->get().value;
     }
+#endif  // SOATABLE_HAS_EXPECTED
 
     for (const Position& position : table.column<Position>()) {
         total += position.value;
