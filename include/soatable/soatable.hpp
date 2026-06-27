@@ -66,9 +66,9 @@ namespace soatable::detail {
 /// @brief The main namespace for the soa_table library.
 namespace soatable {
 
-// =========================================
-// 1. Stable row identity and type helpers
-// =========================================
+// ====================================
+// Stable row identity and type helpers
+// ====================================
 
 /// @brief A stable identifier for a row in an soa_table.
 ///
@@ -396,9 +396,9 @@ using select_result_t = std::tuple<
 
 }  // namespace detail
 
-// =================================
-// 1b. Column storage policies
-// =================================
+// =======================
+// Column storage policies
+// =======================
 
 /// @brief Storage policy: a flat, contiguous column allocated with a caller-chosen allocator.
 /// @tparam Allocator A single-argument allocator template applied per element type
@@ -438,9 +438,9 @@ struct aosoa_layout {
     static constexpr std::size_t tile_size = TileSize;
 };
 
-// =================================
-// 2. Compression and state helpers
-// =================================
+// =============================
+// Compression and state helpers
+// =============================
 
 /// @brief A helper to store a floating-point value in a quantized integer format.
 /// @tparam StorageType The unsigned integer type used for storage.
@@ -634,9 +634,9 @@ class dirty_mask {
     [[nodiscard]] constexpr MaskType get_mask() const { return m_mask; }
 };
 
-// =========================
-// 2b. Validity bitmap
-// =========================
+// ===============
+// Validity bitmap
+// ===============
 
 /// @brief A packed bit container for per-row column presence (Arrow-style validity).
 ///
@@ -706,9 +706,9 @@ class bitmap {
     std::size_t            m_size = 0;
 };
 
-// =========================
-// 3. Sparse column storage
-// =========================
+// =====================
+// Sparse column storage
+// =====================
 
 /// @brief A sparse-to-dense storage for a single column.
 ///
@@ -901,9 +901,9 @@ class column_vector {
     const data_vector& raw_data() const { return m_data; }
 };
 
-// ===================================
-// 4. Reference-semantic row proxy
-// ===================================
+// ============================
+// Reference-semantic row proxy
+// ============================
 
 /// @brief A lightweight, reference-semantic view of one row over a set of required columns.
 ///
@@ -972,9 +972,9 @@ struct row_view_element<0, Cols...> {
     using type = row_id;
 };
 
-// ===========================
-// 5. Relational column table
-// ===========================
+// =======================
+// Relational column table
+// =======================
 
 /// @brief A table where data is stored in sparse columns.
 ///
@@ -1832,9 +1832,9 @@ class basic_soa_table {
     }
 };
 
-// ==========================================
-// 4b. Table aliases by storage policy
-// ==========================================
+// ===============================
+// Table aliases by storage policy
+// ================================
 
 /// @brief The default table: a flat, SIMD-aligned Structure-of-Arrays layout.
 /// @tparam Columns The unique column types.
@@ -1863,9 +1863,9 @@ using custom_soa_table = basic_soa_table<soa_layout_with<Allocator>, Columns...>
 template <std::size_t ChunkSize, typename... Columns>
 using chunked_soa_table = basic_soa_table<aosoa_layout<ChunkSize>, Columns...>;
 
-// =====================
-// 5. Row handle helper
-// =====================
+// ==================
+// Row handle helper
+// ==================
 
 /// @brief A convenience wrapper around a row_id and a reference to its table.
 template <typename... RegisteredColumns>

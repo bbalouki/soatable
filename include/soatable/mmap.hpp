@@ -7,7 +7,7 @@
 /// resident set and only the touched pages occupy physical RAM. Mappings are page-aligned, so
 /// columns stay SIMD-friendly.
 ///
-/// Composes with the C.2 allocator support as mmap_soa_table. Reserve the column capacity up front
+/// Composes with the Callocator support as mmap_soa_table. Reserve the column capacity up front
 /// (table.reserve) so the backing region is mapped once; growth otherwise remaps and copies.
 /// Backing is anonymous demand-paged virtual memory; persistent named-file mapping is a future
 /// extension.

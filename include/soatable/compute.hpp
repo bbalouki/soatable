@@ -125,9 +125,9 @@ template <typename T, typename Storage, typename... Columns, typename Pred>
     return total;
 }
 
-// =========================
+// =====================================
 // Broadcasting, masked, and strided ops
-// =========================
+// =====================================
 
 /// @brief Broadcast a scalar over a column span in place: values[i] = op(values[i], scalar).
 /// @param values The span to modify.
@@ -221,9 +221,9 @@ void transform_column_if(basic_soa_table<Storage, Columns...>& table, Pred pred,
     }
 }
 
-// =========================
+// ====================================
 // Chunk-wise iteration and parallelism
-// =========================
+// ====================================
 
 /// @brief Number of elements below which chunk-parallel ops run serially (task-launch crossover).
 inline constexpr std::size_t parallel_compute_threshold = 1U << 14;
@@ -279,9 +279,9 @@ void transform_column_parallel(basic_soa_table<Storage, Columns...>& table, Unar
     }
 }
 
-// =========================
+// ===================================
 // Cross-column (row-wise) computation
-// =========================
+// ===================================
 
 /// @brief Compute an output column from one or more input columns, per row.
 ///
