@@ -1,0 +1,29 @@
+# Doxygen configuration template. CMake's build_documenation() helper substitutes the @VARS@ via
+# configure_file(@ONLY) and drives generation through the `docs` target.
+
+PROJECT_NAME           = "SoaTable"
+PROJECT_NUMBER         = @PROJECT_VERSION@
+PROJECT_BRIEF          = "Header-only C++23 sparse Structure-of-Arrays table"
+
+OUTPUT_DIRECTORY       = @CMAKE_CURRENT_BINARY_DIR@/doxygen
+INPUT                  = @CMAKE_SOURCE_DIR@/include @CMAKE_SOURCE_DIR@/README.md
+USE_MDFILE_AS_MAINPAGE = @CMAKE_SOURCE_DIR@/README.md
+RECURSIVE              = YES
+
+EXTRACT_ALL            = YES
+EXTRACT_STATIC         = YES
+JAVADOC_AUTOBRIEF      = YES
+MARKDOWN_SUPPORT       = YES
+SORT_MEMBER_DOCS       = NO
+
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+GENERATE_LATEX         = NO
+
+QUIET                  = YES
+WARN_IF_UNDOCUMENTED   = NO
+WARNINGS               = YES
+
+# C++23 sources; help Doxygen parse modern constructs.
+BUILTIN_STL_SUPPORT    = YES
+CPP_CLI_SUPPORT        = NO

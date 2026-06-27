@@ -5,7 +5,7 @@ if(NOT benchmark_FOUND)
     FetchContent_Declare(
         benchmark
         GIT_REPOSITORY https://github.com/google/benchmark.git
-        GIT_TAG        v1.9.5
+        GIT_TAG        "v${BENCHMARCK_VERSION}"
     )
     set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
     set(BENCHMARK_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)

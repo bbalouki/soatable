@@ -1,166 +1,146 @@
+/// @file soatable_example.cpp
+/// @brief A guided tour exercising most of SoaTable's headers in one runnable program.
+/// @author Bertin Balouki SIMYELI
+///
+/// Walks through the container basics, reference-semantic views, the non-throwing accessor,
+/// zero-copy spans and validity bitmaps, the compute layer, query aggregation, binary serialization
+/// round-trip, tiled (AoSoA) storage, dimensional units, time-series helpers, and the runtime
+/// dynamic table.
+
 #include <cstdint>
-#include <functional>
-#include <iostream>
+#include <span>
 #include <string>
 #include <vector>
 
+#include "soatable/compute.hpp"
+#include "soatable/dynamic.hpp"
+#include "soatable/query.hpp"
+#include "soatable/serialize.hpp"
 #include "soatable/soatable.hpp"
+#include "soatable/timeseries.hpp"
+#include "soatable/units.hpp"
 
 #if SOATABLE_HAS_PRINT
 #include <print>
 #define OUT_PRINTLN(...) std::println(__VA_ARGS__)
 #else
 #include <format>
+#include <iostream>
 #define OUT_PRINTLN(...) std::cout << std::format(__VA_ARGS__) << std::endl
 #endif
 
-struct CashFlow {
-    double value = 0.0;
-};
-
-struct AccountId {
-    std::uint64_t value = 0;
-};
-
-struct RiskScore {
-    soatable::quantized_float<std::uint8_t, 0, 100000, 8> value;
-};
-
-struct Mass {
-    double kg = 0.0;
-};
-
-struct Velocity {
-    double dx = 0.0;
-    double dy = 0.0;
-};
-
-struct Position {
-    double x = 0.0;
-    double y = 0.0;
-};
-
-struct ObjectName {
+namespace {
+struct Symbol {
     std::string value;
 };
+struct Price {
+    double value = 0.0;
+};
+struct Qty {
+    int value = 0;
+};
+struct Notional {
+    double value = 0.0;
+};
+using Book = soatable::soa_table<Symbol, Price, Qty, Notional>;
 
-struct IsActive {};  // Component with no data (tag)
-
-using Table = soatable::
-    SoaTable<CashFlow, AccountId, RiskScore, Mass, Velocity, Position, ObjectName, IsActive>;
-using Row = soatable::
-    RowHandle<CashFlow, AccountId, RiskScore, Mass, Velocity, Position, ObjectName, IsActive>;
+Book make_book() {
+    Book       book;
+    const auto add = [&](const std::string& symbol, double price, int qty) {
+        const auto id = book.insert();  // Stable generational handle.
+        book.assign<Symbol>(id, Symbol {symbol});
+        book.assign<Price>(id, Price {price});
+        book.assign<Qty>(id, Qty {qty});
+    };
+    add("AAPL", 190.0, 100);
+    add("AAPL", 191.0, 50);
+    add("MSFT", 410.0, 30);
+    return book;
+}
+}  // namespace
 
 int main() {
-    Table database;
-    database.reserve(32);
+    Book book = make_book();
 
-    auto make_row = [&](Table& table) { return Row {table.insert(), table}; };
-
-    OUT_PRINTLN(" Basic Operations ");
-    auto transaction_a = make_row(database);
-    transaction_a.assign<AccountId>(99014522);
-    transaction_a.assign<CashFlow>(1450000.50);
-    transaction_a.assign<RiskScore>(12.50);
-    transaction_a.assign<ObjectName>("High-Yield Corporate Bond Portfolio");
-    transaction_a.assign<IsActive>();
-
-    auto transaction_b = make_row(database);
-    transaction_b.assign<AccountId>(88231011);
-    transaction_b.assign<CashFlow>(-320000.00);
-    transaction_b.assign<RiskScore>(45.80);
-    transaction_b.assign<ObjectName>("Short-Selling Speculative Derivative Margin");
-
-    OUT_PRINTLN("Finance rows:");
-    double net_balance = 0.0;
-    for (auto [id, flow, risk, name] : database.select<CashFlow, RiskScore, ObjectName>()) {
-        OUT_PRINTLN("  row {}: {}", id.index, name.get().value);
-        OUT_PRINTLN("    flow={}, risk={}", flow.get().value, risk.get().value.get());
-        net_balance += flow.get().value;
-    }
-    OUT_PRINTLN("  net balance = {}\n", net_balance);
-
-    OUT_PRINTLN(" Optional Columns Selection ");
-    // Using std::optional to join required and optional columns
-    for (auto [id, name, active] : database.select<ObjectName, std::optional<IsActive>>()) {
-        OUT_PRINTLN("  row {}: {} (Active: {})", id.index, name.get().value, active.has_value());
+    // 1. Reference-semantic views:
+    // structured bindings yield real references (no .get()).
+    OUT_PRINTLN("== view ==");
+    for (auto [id, symbol, price] : book.view<Symbol, Price>()) {
+        static_cast<void>(id);
+        OUT_PRINTLN("{} @ {:.2f}", symbol.value, price.value);
     }
 
-    OUT_PRINTLN("\n Physics Simulation Scenario ");
-    auto body_a = make_row(database);
-    body_a.assign<Mass>(1200.0);
-    body_a.assign<Position>(0.0, 0.0);
-    body_a.assign<Velocity>(1.5, -0.5);
-    body_a.assign<ObjectName>("Dynamic Projectile A");
-
-    auto body_b = make_row(database);
-    body_b.assign<Mass>(50.0);
-    body_b.assign<Position>(10.0, 50.0);
-    body_b.assign<Velocity>(0.0, 9.81);
-    body_b.assign<ObjectName>("Dynamic Projectile B");
-
-    const double dt = 0.016;
-    for (auto [id, position, velocity, mass, name] :
-         database.select<Position, Velocity, Mass, ObjectName>()) {
-        position.get().x += velocity.get().dx * dt;
-        position.get().y += velocity.get().dy * dt;
-        OUT_PRINTLN(
-            "  row {}: {} ({} kg) -> ({}, {})",
-            id.index,
-            name.get().value,
-            mass.get().kg,
-            position.get().x,
-            position.get().y
-        );
-    }
-
-    OUT_PRINTLN("\n Batch Operations ");
-    auto                    batch_ids = database.insert_batch(3);
-    std::vector<ObjectName> names     = {{"Batch 1"}, {"Batch 2"}, {"Batch 3"}};
-    database.assign_batch<ObjectName>(batch_ids, names.begin());
-    OUT_PRINTLN("  Inserted and assigned 3 rows via batch operations.");
-
-    OUT_PRINTLN("\n Sorting ");
-    OUT_PRINTLN("Sorting by cash flow:");
-    database.sort_by<CashFlow>([](const CashFlow& lhs, const CashFlow& rhs) {
-        return lhs.value < rhs.value;
+    // 2. Compute: notional = price * qty over the Price/Qty join, then a span reduction.
+    soatable::compute::assign_from<Notional, Price, Qty>(book, [](const Price& p, const Qty& q) {
+        return Notional {p.value * q.value};
     });
-    for (auto [id, flow, name] : database.select<CashFlow, ObjectName>()) {
-        OUT_PRINTLN("  row {}: {} :: {}", id.index, flow.get().value, name.get().value);
+    const double gross = soatable::compute::reduce_column<Notional>(
+        book, 0.0, [](double acc, const Notional& n) { return acc + n.value; }
+    );
+    OUT_PRINTLN("== compute == gross notional {:.2f}", gross);
+
+    // 3. Query: total notional per symbol.
+    OUT_PRINTLN("== query ==");
+    const auto volume = soatable::query::group_sum<Symbol, Notional>(
+        book, [](const Symbol& s) { return s.value; }, [](const Notional& n) { return n.value; }
+    );
+    for (const auto& [symbol, total] : volume) {
+        OUT_PRINTLN("{}: {:.2f}", symbol, total);
     }
 
-    OUT_PRINTLN("\n Handle Safety & Recycling ");
-    OUT_PRINTLN("  body_a valid before erase: {}", body_a.is_valid());
-    body_a.erase();
-    OUT_PRINTLN("  body_a valid after erase: {}", body_a.is_valid());
-
-    auto recycled = make_row(database);
-    recycled.assign<CashFlow>(10500.0);
-    recycled.assign<ObjectName>("Recycled Micro-Loan Settlement");
+    // 4. Zero-copy span + validity bitmap.
+    const std::span<const Price> prices = book.column<Price>();
     OUT_PRINTLN(
-        "  recycled row = (index: {}, generation: {})", recycled.id.index, recycled.id.generation
-    );
-    OUT_PRINTLN("  Stale body_a handle valid: {} (should be false)", body_a.is_valid());
-
-    OUT_PRINTLN("\n Edge Case: Multi-column sorting with missing values ");
-    // Sort by AccountId. Rows without AccountId should be handled gracefully.
-    database.sort_by_multi(
-        std::pair<AccountId, std::function<bool(const AccountId&, const AccountId&)>> {
-            {}, [](const AccountId& a, const AccountId& b) { return a.value < b.value; }
-        }
+        "== span == {} prices, {} rows priced", prices.size(), book.validity<Price>().count()
     );
 
-    OUT_PRINTLN("  Sorted by AccountId (rows without it should be last):");
-    for (auto row : database.rows()) {
-        auto* acc  = database.try_get<AccountId>(row);
-        auto* name = database.try_get<ObjectName>(row);
-        OUT_PRINTLN(
-            "    Row {}: Account={}, Name={}",
-            row.index,
-            acc ? std::to_string(acc->value) : "N/A",
-            name ? name->value : "N/A"
-        );
+    // 5. Serialization round-trip over a trivially-copyable schema.
+    soatable::soa_table<Price, Qty> pod;
+    for (auto [id, price, qty] : book.select<Price, Qty>()) {
+        static_cast<void>(id);
+        const auto row = pod.insert();
+        pod.assign<Price>(row, price.get());
+        pod.assign<Qty>(row, qty.get());
     }
+    const auto                      bytes = soatable::save(pod);
+    soatable::soa_table<Price, Qty> restored;
+    const auto                      status = soatable::load(restored, bytes);
+    OUT_PRINTLN(
+        "== serialize == {} bytes, restored {} rows, ok={}",
+        bytes.size(),
+        restored.size(),
+        status == soatable::serialize_status::ok
+    );
+
+    // 6. Tiled (AoSoA) storage with per-chunk aligned spans.
+    soatable::aosoa_table<4, Price> tiled;
+    for (int i = 0; i < 10; ++i) {
+        tiled.assign<Price>(tiled.insert(), Price {static_cast<double>(i)});
+    }
+    OUT_PRINTLN("== aosoa == {} price chunks", tiled.column_tiles<Price>().size());
+
+    // 7. Dimensional units: velocity = distance / time, checked at compile time.
+    namespace un     = soatable::units;
+    const auto speed = un::length<> {100.0} / un::duration<> {4.0};
+    OUT_PRINTLN("== units == speed {:.1f} (length/time)", speed.value());
+
+    // 8. Time-series rolling mean over the price column's dense order.
+    const auto means = soatable::timeseries::rolling_mean_column<Price>(
+        book, [](const Price& p) { return p.value; }, 2
+    );
+    OUT_PRINTLN("== timeseries == last 2-window mean {:.2f}", means.back());
+
+    // 9. Runtime dynamic schema with metadata.
+    soatable::dynamic_table dyn;
+    dyn.add_column<double>("altitude");
+    dyn.set_metadata("altitude", "unit", "metres");
+    const auto sample = dyn.insert_row();
+    dyn.set<double>(sample, "altitude", 1280.0);
+    OUT_PRINTLN(
+        "== dynamic == altitude {:.0f} {}",
+        *dyn.get<double>(sample, "altitude"),
+        *dyn.get_metadata("altitude", "unit")
+    );
 
     return 0;
 }

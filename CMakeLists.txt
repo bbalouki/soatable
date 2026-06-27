@@ -1,18 +1,32 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.25)
 
-project(soatable VERSION 0.1.0 LANGUAGES CXX)
+file(READ "VERSION.txt" RAW_VERSION)
+string(STRIP "${RAW_VERSION}" APP_VERSION)
+project(SOATABLE VERSION ${APP_VERSION} LANGUAGES CXX)
 
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON) 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(FETCHCONTENT_BASE_DIR "${CMAKE_SOURCE_DIR}/.cache/_deps")
+include(${CMAKE_SOURCE_DIR}/cmake/Helpers.cmake)
+include(${CMAKE_SOURCE_DIR}/cmake/Versions.cmake)
+
+if(${PROJECT_NAME}_ADD_COVERAGE_ANALYSIS)
+    add_coverage_analysis(${CMAKE_SOURCE_DIR})
+endif()
+
+if(${PROJECT_NAME}_APPLY_FORMATING)
+    apply_formating(${PROJECT_NAME}_USE_PER_FILE_FORMATTING ${CMAKE_SOURCE_DIR}/include)
+    apply_formating(${PROJECT_NAME}_USE_PER_FILE_FORMATTING ${CMAKE_SOURCE_DIR}/example)
+    apply_formating(${PROJECT_NAME}_USE_PER_FILE_FORMATTING ${CMAKE_SOURCE_DIR}/benchmarks)
+    apply_formating(${PROJECT_NAME}_USE_PER_FILE_FORMATTING ${CMAKE_SOURCE_DIR}/tests)
+endif()
+
+if(${PROJECT_NAME}_APPLY_CLANG_TIDY_GLOBALY)
+    apply_clang_tidy_globaly()
+endif()
 
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
-
-option(SOATABLE_BUILD_EXAMPLES "Build the SoaTable example program" ON)
-option(SOATABLE_BUILD_BENCHMARKS "Build the SoaTable benchmark program" ON)
-option(SOATABLE_BUILD_TESTS "Build the SoaTable tests" ON)
-
 
 add_library(soatable INTERFACE)
 add_library(soatable::soatable ALIAS soatable)
@@ -23,7 +37,18 @@ target_include_directories(soatable INTERFACE
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
+# Propagate the MSVC debugger visualizer to consumers.
+target_sources(soatable INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/tools/visualizers/soatable.natvis>
+  $<INSTALL_INTERFACE:${CMAKE_INSTALL_DATADIR}/soatable/visualizers/soatable.natvis>
+)
+
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+# Ship the debugger visualizers (MSVC .natvis and GDB pretty-printers) alongside the package.
+install(DIRECTORY tools/visualizers/ DESTINATION ${CMAKE_INSTALL_DATADIR}/soatable/visualizers
+  PATTERN "__pycache__" EXCLUDE
+)
 
 install(TARGETS soatable
   EXPORT soatableTargets
@@ -53,15 +78,19 @@ install(FILES
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/soatable
 )
 
-if(SOATABLE_BUILD_EXAMPLES AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/example)
+if(SOATABLE_BUILD_EXAMPLES AND EXISTS ${CMAKE_SOURCE_DIR}/example)
   add_subdirectory(example)
 endif()
 
-if(SOATABLE_BUILD_BENCHMARKS AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks)
+if(SOATABLE_BUILD_BENCHMARKS AND EXISTS ${CMAKE_SOURCE_DIR}/benchmarks)
   add_subdirectory(benchmarks)
 endif()
 
-if(SOATABLE_BUILD_TESTS AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tests)
+if(SOATABLE_BUILD_TESTS AND EXISTS ${CMAKE_SOURCE_DIR}/tests)
   enable_testing()
   add_subdirectory(tests)
+endif()
+
+if(SOATABLE_BUILD_DOCUMENTATION)
+  build_documenation()
 endif()
