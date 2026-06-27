@@ -1,8 +1,3 @@
-# Header-only port. Use this directory as a vcpkg overlay:
-#   vcpkg install soatable --overlay-ports=packaging/vcpkg/ports
-#
-# On each tagged release, replace SHA512 below with the value reported by:
-#   vcpkg hash <downloaded-tarball>
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO bbalouki/soatable

@@ -1,6 +1,6 @@
 {
   "name": "soatable",
-  "version": "0.3.0",
+  "version": "0.1.0",
   "description": "Header-only C++23 sparse Structure-of-Arrays table with generational handles.",
   "homepage": "https://github.com/bbalouki/soatable",
   "license": "MIT",
