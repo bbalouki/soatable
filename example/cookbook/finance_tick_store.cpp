@@ -56,7 +56,7 @@ int main() {
     }
 
     // Print the large trades (notional over 10k).
-    OUT_PRINTLN("--- large trades ---");
+    OUT_PRINTLN(" Large Trades ");
     for (auto row : soatable::query::select_where<Symbol, Notional>(ticks, [](auto trade) {
              return trade.template get<Notional>().value > 10000.0;
          })) {

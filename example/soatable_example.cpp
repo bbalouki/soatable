@@ -62,7 +62,8 @@ Book make_book() {
 int main() {
     Book book = make_book();
 
-    // 1. Reference-semantic views: structured bindings yield real references (no .get()).
+    // 1. Reference-semantic views:
+    // structured bindings yield real references (no .get()).
     OUT_PRINTLN("== view ==");
     for (auto [id, symbol, price] : book.view<Symbol, Price>()) {
         static_cast<void>(id);
