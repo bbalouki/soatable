@@ -19,7 +19,6 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
-#include <expected>
 #include <functional>
 #include <future>
 #include <limits>
@@ -39,6 +38,18 @@
 #define SOATABLE_HAS_PRINT 1
 #else
 #define SOATABLE_HAS_PRINT 0
+#endif
+
+// std::expected (C++23) is an optional enhancement: where the standard library does not provide it
+// the feature-detected get_expected() accessors are simply not declared, and try_get<T>() remains
+// the always-available non-throwing accessor.
+#if __has_include(<expected>)
+#include <expected>
+#endif
+#if defined(__cpp_lib_expected) && __cpp_lib_expected >= 202202L
+#define SOATABLE_HAS_EXPECTED 1
+#else
+#define SOATABLE_HAS_EXPECTED 0
 #endif
 
 // Freestanding / no-exceptions mode. Define SOATABLE_NO_EXCEPTIONS to compile without throwing:
@@ -1302,6 +1313,7 @@ class basic_soa_table {
         return *value;
     }
 
+#if SOATABLE_HAS_EXPECTED
     /// @brief Non-throwing accessor returning a column reference or an access_error.
     /// @tparam T The type of the column.
     /// @param id The row_id of the row.
@@ -1339,6 +1351,7 @@ class basic_soa_table {
         }
         return std::reference_wrapper<const T>(*value);
     }
+#endif  // SOATABLE_HAS_EXPECTED
 
     /// @brief Iterate over all alive row IDs.
     [[nodiscard]] auto rows() { return rows_impl(this); }
