@@ -96,6 +96,11 @@ void append_pod(std::vector<std::byte>& out, const T& value) {
 /// @brief Append raw bytes of a contiguous range of trivially-copyable values.
 template <typename T>
 void append_array(std::vector<std::byte>& out, std::span<const T> values) {
+    // An empty column yields a null data() pointer; skip the copy rather than form pointer
+    // arithmetic on null.
+    if (values.empty()) {
+        return;
+    }
     const auto* bytes = reinterpret_cast<const std::byte*>(values.data());
     out.insert(out.end(), bytes, bytes + values.size_bytes());
 }
@@ -123,6 +128,11 @@ struct byte_reader {
         const std::size_t bytes = count * sizeof(T);
         if (!ok || offset + bytes > data.size()) {
             ok = false;
+            return;
+        }
+        // dst is null for an empty destination vector; a zero-length memcpy on a null pointer is
+        // undefined behavior, so make it a no-op.
+        if (bytes == 0) {
             return;
         }
         std::memcpy(dst, data.data() + offset, bytes);
