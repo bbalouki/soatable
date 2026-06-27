@@ -26,7 +26,7 @@ function(soatable_apply_strict_warnings target treat_as_errors)
     endif()
 endfunction()
 
-# --- Unit tests -------------------------------------------------------------------------------
+#  Unit tests
 set(SOATABLE_UNIT_TEST_SOURCES
     unittests/table_test.cpp
     unittests/select_test.cpp
@@ -64,12 +64,12 @@ soatable_apply_strict_warnings(soatable_tests FALSE)
 include(GoogleTest)
 gtest_discover_tests(soatable_tests)
 
-# --- Strict-warning compile gate (header only, treated as errors) -----------------------------
+#  Strict-warning compile gate (header only, treated as errors) 
 add_executable(soatable_warning_check warning_check.cpp)
 target_link_libraries(soatable_warning_check PRIVATE soatable::soatable)
 soatable_apply_strict_warnings(soatable_warning_check TRUE)
 
-# --- Freestanding / no-exceptions build gate --------------------------------------------------
+#  Freestanding / no-exceptions build gate 
 add_executable(soatable_no_exceptions_check no_exceptions_check.cpp)
 target_link_libraries(soatable_no_exceptions_check PRIVATE soatable::soatable)
 target_compile_definitions(soatable_no_exceptions_check PRIVATE SOATABLE_NO_EXCEPTIONS)
@@ -78,7 +78,7 @@ if(NOT MSVC)
 endif()
 add_test(NAME no_exceptions_check COMMAND soatable_no_exceptions_check)
 
-# --- Compile-fail tests: each target must fail to build (negative compile-time contracts) ------
+#  Compile-fail tests: each target must fail to build (negative compile-time contracts) 
 set(SOATABLE_COMPILE_FAIL_CASES
     duplicate_columns
     unregistered_column
@@ -94,8 +94,8 @@ foreach(case IN LISTS SOATABLE_COMPILE_FAIL_CASES)
     )
     add_test(
         NAME compile_fail_${case}
-        COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR}
-                --target soatable_compile_fail_${case} --config $<CONFIG>
+        COMMAND ${CMAKE_COMMAND} build ${CMAKE_BINARY_DIR}
+                target soatable_compile_fail_${case} config $<CONFIG>
     )
     set_tests_properties(compile_fail_${case} PROPERTIES WILL_FAIL TRUE)
 endforeach()
