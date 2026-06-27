@@ -86,8 +86,11 @@ constexpr std::uint64_t schema_fingerprint() {
 /// @brief Append a trivially-copyable value to a byte buffer.
 template <typename T>
 void append_pod(std::vector<std::byte>& out, const T& value) {
-    const auto* bytes = reinterpret_cast<const std::byte*>(&value);
-    out.insert(out.end(), bytes, bytes + sizeof(T));
+    // Grow then memcpy rather than insert() over a reinterpreted byte range: the latter trips a
+    // GCC -Wstringop-overflow false positive when it cannot prove the source object's size.
+    const std::size_t offset = out.size();
+    out.resize(offset + sizeof(T));
+    std::memcpy(out.data() + offset, &value, sizeof(T));
 }
 
 /// @brief Append raw bytes of a contiguous range of trivially-copyable values.
