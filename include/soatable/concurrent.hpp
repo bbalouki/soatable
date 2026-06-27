@@ -12,6 +12,7 @@
 /// must not escape it, since they are only valid while the lock is held.
 #pragma once
 
+#include <mutex>
 #include <shared_mutex>
 #include <utility>
 
