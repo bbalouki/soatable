@@ -8,6 +8,8 @@
 #include "soatable/soatable.hpp"
 #include "test_types.hpp"
 
+#if SOATABLE_HAS_EXPECTED
+
 using soatable_test::Age;
 using soatable_test::DemoTable;
 
@@ -53,3 +55,5 @@ TEST(ExpectedTest, ConstAccessorReturnsConstReference) {
     ASSERT_TRUE(result.has_value());
     EXPECT_EQ(result->get().value, 9);
 }
+
+#endif  // SOATABLE_HAS_EXPECTED
