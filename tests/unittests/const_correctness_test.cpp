@@ -35,10 +35,12 @@ static_assert(std::is_same_v<
               decltype(std::declval<const DemoTable&>().try_get<Age>(std::declval<row_id>())),
               const Age*>);
 
+#if SOATABLE_HAS_EXPECTED
 // get_expected<T> wraps a const reference when called on a const table.
 static_assert(std::is_same_v<
               decltype(std::declval<const DemoTable&>().get_expected<Age>(std::declval<row_id>())),
               std::expected<std::reference_wrapper<const Age>, soatable::access_error>>);
+#endif  // SOATABLE_HAS_EXPECTED
 
 }  // namespace
 
