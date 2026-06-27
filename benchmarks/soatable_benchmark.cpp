@@ -62,7 +62,7 @@ SensorTable build_table(std::size_t row_count, double temp_p, double pressure_p,
 
 }  // namespace
 
-// --- Insertion --------------------------------------------------------------------------------
+//  Insertion
 static void BM_Insert(benchmark::State& state) {
     const std::size_t row_count = static_cast<std::size_t>(state.range(0));
     for (auto _ : state) {
@@ -78,7 +78,7 @@ static void BM_Insert(benchmark::State& state) {
 }
 BENCHMARK(BM_Insert)->Arg(100'000);
 
-// --- Erase churn ------------------------------------------------------------------------------
+//  Erase churn
 static void BM_EraseChurn(benchmark::State& state) {
     const std::size_t row_count = static_cast<std::size_t>(state.range(0));
     for (auto _ : state) {
@@ -100,7 +100,7 @@ static void BM_EraseChurn(benchmark::State& state) {
 }
 BENCHMARK(BM_EraseChurn)->Arg(100'000);
 
-// --- Sorting ----------------------------------------------------------------------------------
+//  Sorting -
 static void BM_SortByColumn(benchmark::State& state) {
     const std::size_t row_count = static_cast<std::size_t>(state.range(0));
     SensorTable       table     = build_table(row_count, 1.0, 1.0, 1.0);
@@ -141,7 +141,7 @@ static void BM_SortByColumnParallel(benchmark::State& state) {
 }
 BENCHMARK(BM_SortByColumnParallel)->Arg(100'000);
 
-// --- Selection: SoaTable vs baselines ---------------------------------------------------------
+//  Selection: SoaTable vs baselines
 static void BM_SoaTableSelect(benchmark::State& state) {
     const std::size_t row_count = static_cast<std::size_t>(state.range(0));
     SensorTable       table     = build_table(row_count, 0.70, 0.40, 0.05);
@@ -203,7 +203,7 @@ static void BM_AoSBranchScan(benchmark::State& state) {
 }
 BENCHMARK(BM_AoSBranchScan)->Arg(100'000)->Arg(250'000);
 
-// --- Density sweep: select cost should track the smallest required column ---------------------
+//  Density sweep: select cost should track the smallest required column
 static void BM_SelectDensitySweep(benchmark::State& state) {
     const std::size_t row_count      = static_cast<std::size_t>(state.range(0));
     const double      region_density = static_cast<double>(state.range(1)) / 100.0;
@@ -224,7 +224,7 @@ BENCHMARK(BM_SelectDensitySweep)
     ->Args({250'000, 20})
     ->Args({250'000, 50});
 
-// --- Driver heuristic validation: smallest column should drive iteration ----------------------
+//  Driver heuristic validation: smallest column should drive iteration -
 // RegionId is sparse and Temperature is dense; the auto driver picks RegionId. The forced variant
 // drives off the dense Temperature column and filters manually, modelling a wrong driver choice.
 static void BM_SelectAutoSmallestDriver(benchmark::State& state) {
@@ -259,7 +259,7 @@ static void BM_SelectForcedLargestDriver(benchmark::State& state) {
 }
 BENCHMARK(BM_SelectForcedLargestDriver)->Arg(250'000);
 
-// --- Hand-rolled columnar (SoA) full scan baseline --------------------------------------------
+//  Hand-rolled columnar (SoA) full scan baseline
 static void BM_HandRolledSoAScan(benchmark::State& state) {
     const std::size_t          row_count = static_cast<std::size_t>(state.range(0));
     std::vector<double>        celsius(row_count);
@@ -300,7 +300,7 @@ static void BM_HandRolledSoAScan(benchmark::State& state) {
 }
 BENCHMARK(BM_HandRolledSoAScan)->Arg(100'000)->Arg(250'000);
 
-// --- SoA vs AoSoA (tiled) selection -----------------------------------------------------------
+//  SoA vs AoSoA (tiled) selection
 // A dense 2-column select, contiguous storage vs 1024-element tiles, to show the layout cost of a
 // full-column scan is comparable while tiled storage bounds reallocation on growth.
 static void BM_SelectSoaDense(benchmark::State& state) {
@@ -340,7 +340,7 @@ static void BM_SelectAosoaDense(benchmark::State& state) {
 }
 BENCHMARK(BM_SelectAosoaDense)->Arg(250'000);
 
-// --- Compute throughput -----------------------------------------------------------------------
+//  Compute throughput
 static void BM_ComputeTransformColumn(benchmark::State& state) {
     const std::size_t                row_count = static_cast<std::size_t>(state.range(0));
     soatable::soa_table<Temperature> table;
