@@ -11,6 +11,7 @@
 
 #include <cstddef>
 #include <span>
+#include <tuple>
 #include <vector>
 
 #include "soatable/soatable.hpp"
@@ -106,7 +107,7 @@ TEST(SerializeTest, RejectsTruncatedBuffer) {
 
 TEST(SerializeTest, RejectsSchemaMismatch) {
     TickTable table;
-    table.insert();
+    std::ignore = table.insert();
     const std::vector<std::byte> bytes = soatable::save(table);
 
     // A different schema (extra column) must be rejected.
