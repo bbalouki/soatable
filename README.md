@@ -8,7 +8,9 @@
 ![Dependencies](https://img.shields.io/badge/Core%20dependencies-None-brightgreen)
 
 **SoaTable is a header-only C++23 library for storing tables of data so that the computer can read
-them as fast as physically possible.** You still think in terms of rows, "here is one trade", "here
+them as fast as physically possible.** 
+
+You still think in terms of rows, "here is one trade", "here
 is one spaceship", "here is one game character", but underneath, SoaTable stores the data in the
 shape the hardware actually prefers. The result is a familiar, row-shaped way of working that runs
 dramatically faster on the kinds of questions real programs ask.
@@ -609,7 +611,7 @@ SoaTable ships pretty-printers that render its types (tables, handles, `delta_va
 `quantized_float`, ...) as readable summaries in a debugger. When you consume the library through
 CMake, the Visual Studio (`.natvis`) visualizer is embedded into your program automatically, with no
 setup. The GDB and LLDB printers are opt-in: follow the short setup in
-[tools/visualizers/README.md](tools/visualizers/README.md).
+[Visualizers](tools/visualizers/README.md).
 
 ## Benchmarks: what the speed actually is
 

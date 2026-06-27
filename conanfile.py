@@ -13,7 +13,9 @@ class SoaTableConan(ConanFile):
     license = "MIT"
     url = "https://github.com/bbalouki/soatable"
     homepage = "https://github.com/bbalouki/soatable"
-    description = "Header-only C++23 sparse Structure-of-Arrays table with generational handles."
+    description = (
+        "Header-only C++23 sparse Structure-of-Arrays table with generational handles."
+    )
     topics = ("soa", "ecs", "columnar", "header-only", "cpp23")
 
     settings = "os", "arch", "compiler", "build_type"
@@ -27,7 +29,6 @@ class SoaTableConan(ConanFile):
     )
 
     def package_id(self):
-        # Header-only: the package is identical across configurations.
         self.info.clear()
 
     def layout(self):
@@ -46,8 +47,7 @@ class SoaTableConan(ConanFile):
             src=self.source_folder,
             dst=os.path.join(self.package_folder, "licenses"),
         )
-        # Ship the debugger visualizers so Conan users receive them too; they are opt-in developer
-        # aids that the consumer wires into their debugger (see tools/visualizers/README.md).
+
         copy(
             self,
             "*",
