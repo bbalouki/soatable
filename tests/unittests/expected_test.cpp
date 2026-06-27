@@ -1,5 +1,5 @@
 /// @file expected_test.cpp
-/// @brief get_expected (Phase 2.3): the non-throwing accessor returns the value on success and a
+/// @brief get_expected: the non-throwing accessor returns the value on success and a
 /// typed access_error otherwise, in both the mutable and const overloads.
 /// @author Bertin Balouki SIMYELI
 

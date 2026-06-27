@@ -1,5 +1,5 @@
 /// @file aosoa_test.cpp
-/// @brief A.2 AoSoA tiled storage policy: aosoa_table behaves identically to soa_table for the row
+/// @brief AoSoA tiled storage policy: aosoa_table behaves identically to soa_table for the row
 /// API, exposes per-tile aligned spans via column_tiles<T>(), and tiles respect the configured
 /// size.
 /// @author Bertin Balouki SIMYELI

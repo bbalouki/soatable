@@ -1,5 +1,5 @@
 /// @file dynamic_test.cpp
-/// @brief E.3 runtime schema evolution: dynamic_table adds/removes typed columns at runtime,
+/// @brief runtime schema evolution: dynamic_table adds/removes typed columns at runtime,
 /// type-checks access, stores sparse cells, and carries per-column metadata.
 /// @author Bertin Balouki SIMYELI
 

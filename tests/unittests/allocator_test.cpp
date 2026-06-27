@@ -1,5 +1,5 @@
 /// @file allocator_test.cpp
-/// @brief C.2 allocator-aware columns: a custom allocator is actually used by custom_soa_table, and
+/// @brief allocator-aware columns: a custom allocator is actually used by custom_soa_table, and
 /// pmr_soa_table routes column storage through a std::pmr memory resource.
 /// @author Bertin Balouki SIMYELI
 

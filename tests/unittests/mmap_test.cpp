@@ -1,5 +1,5 @@
 /// @file mmap_test.cpp
-/// @brief D.3 memory-mapped columns: mmap_soa_table backs column storage with demand-paged virtual
+/// @brief memory-mapped columns: mmap_soa_table backs column storage with demand-paged virtual
 /// memory.
 /// @author Bertin Balouki SIMYELI
 ///

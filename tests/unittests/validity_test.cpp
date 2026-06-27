@@ -1,5 +1,5 @@
 /// @file validity_test.cpp
-/// @brief A.3 validity bitmaps: validity<T>() reports per-row column presence, composes with
+/// @brief validity bitmaps: validity<T>() reports per-row column presence, composes with
 /// make_row_id, and drives branchless masked iteration via for_each_set.
 /// @author Bertin Balouki SIMYELI
 

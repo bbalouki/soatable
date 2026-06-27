@@ -1,5 +1,5 @@
 /// @file span_test.cpp
-/// @brief A.1 zero-copy column spans: column<T>() exposes dense values contiguously,
+/// @brief zero-copy column spans: column<T>() exposes dense values contiguously,
 /// row_indices<T>() maps them back to rows, and mutations through the span are visible in the
 /// table.
 /// @author Bertin Balouki SIMYELI
@@ -86,7 +86,7 @@ TEST(SpanTest, ConstTableYieldsConstSpan) {
 }
 
 TEST(SpanTest, ColumnStorageIsSimdOverAligned) {
-    // A.2: column storage is over-aligned (Arrow's 64-byte recommendation) for aligned SIMD loads.
+    // column storage is over-aligned (Arrow's 64-byte recommendation) for aligned SIMD loads.
     DemoTable table;
     for (int i = 0; i < 100; ++i) {
         const auto id = table.insert();

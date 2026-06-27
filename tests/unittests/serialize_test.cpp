@@ -1,5 +1,5 @@
 /// @file serialize_test.cpp
-/// @brief A.4 serialization: round-trip a table through save()/load(), and reject corrupt or
+/// @brief serialization: round-trip a table through save()/load(), and reject corrupt or
 /// mismatched buffers.
 /// @author Bertin Balouki SIMYELI
 ///

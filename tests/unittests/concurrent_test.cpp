@@ -1,5 +1,5 @@
 /// @file concurrent_test.cpp
-/// @brief D.1 concurrent table: synchronized_table serializes writers against readers.
+/// @brief concurrent table: synchronized_table serializes writers against readers.
 /// @author Bertin Balouki SIMYELI
 ///
 /// Many reader threads run concurrently with a single ingesting writer; the final state must be

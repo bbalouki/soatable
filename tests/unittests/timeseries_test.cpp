@@ -1,5 +1,5 @@
 /// @file timeseries_test.cpp
-/// @brief E.4 time-series helpers: rolling sum/mean, successive deltas, projected column rolling
+/// @brief time-series helpers: rolling sum/mean, successive deltas, projected column rolling
 /// mean, and dirty-region scans for incremental recompute.
 /// @author Bertin Balouki SIMYELI
 

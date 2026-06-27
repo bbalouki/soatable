@@ -1,5 +1,5 @@
 /// @file query_test.cpp
-/// @brief B.2 query DSL: select_where predicate filtering and group_by aggregation
+/// @briefquery DSL: select_where predicate filtering and group_by aggregation
 /// (group_reduce/sum/count).
 /// @author Bertin Balouki SIMYELI
 

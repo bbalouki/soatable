@@ -1,5 +1,5 @@
 /// @file view_test.cpp
-/// @brief row_view proxy (Phase 2.1): structured bindings yield real references, get<T>() accessor,
+/// @brief row_view proxy : structured bindings yield real references, get<T>() accessor,
 /// the required-columns filter, and the const overload yielding readable values.
 /// @author Bertin Balouki SIMYELI
 

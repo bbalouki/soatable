@@ -1,5 +1,5 @@
 /// @file units_test.cpp
-/// @brief E.3 units: compile-time dimensional analysis.
+/// @brief units: compile-time dimensional analysis.
 /// @author Bertin Balouki SIMYELI
 ///
 /// Arithmetic combines dimensions correctly, and a quantity is usable as a SoaTable column.
