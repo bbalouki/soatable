@@ -20,6 +20,22 @@ GENERATE_HTML          = YES
 HTML_OUTPUT            = html
 GENERATE_LATEX         = NO
 
+# Modern theme
+GENERATE_TREEVIEW      = YES
+DISABLE_INDEX          = NO
+FULL_SIDEBAR           = NO
+
+HTML_COLORSTYLE        = LIGHT
+
+HTML_HEADER            = @DOXYGEN_HTML_HEADER@
+HTML_EXTRA_STYLESHEET  = @DOXYGEN_AWESOME_DIR@/doxygen-awesome.css \
+                         @DOXYGEN_AWESOME_DIR@/doxygen-awesome-sidebar-only.css \
+                         @DOXYGEN_AWESOME_DIR@/doxygen-awesome-sidebar-only-darkmode-toggle.css
+HTML_EXTRA_FILES       = @DOXYGEN_AWESOME_DIR@/doxygen-awesome-darkmode-toggle.js \
+                         @DOXYGEN_AWESOME_DIR@/doxygen-awesome-fragment-copy-button.js \
+                         @DOXYGEN_AWESOME_DIR@/doxygen-awesome-paragraph-link.js \
+                         @DOXYGEN_AWESOME_DIR@/doxygen-awesome-interactive-toc.js
+
 QUIET                  = YES
 WARN_IF_UNDOCUMENTED   = NO
 WARNINGS               = YES
