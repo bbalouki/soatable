@@ -1,13 +1,20 @@
-# SoaTable
+# SoaTable — a header-only C++23 Structure-of-Arrays (SoA) table for data-oriented design
 
 [![Build](https://github.com/bbalouki/soatable/actions/workflows/ci.yaml/badge.svg)](https://github.com/bbalouki/soatable/actions/workflows/ci.yaml)
-![C++](https://img.shields.io/badge/C%2B%2B-23-blue.svg)
+![C++23](https://img.shields.io/badge/C%2B%2B-23-blue.svg)
 ![CMake](https://img.shields.io/badge/CMake-3.25%2B-green.svg)
-![License](https://img.shields.io/badge/License-MIT-yellow.svg)
+![License MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Header-only](https://img.shields.io/badge/Header--only-Yes-blue)
-![Dependencies](https://img.shields.io/badge/Core%20dependencies-None-brightgreen)
+![Zero dependencies](https://img.shields.io/badge/Core%20dependencies-None-brightgreen)
 
-**SoaTable is a header-only C++23 library for storing tables of data so that the computer can read
+**SoaTable is a header-only, dependency-free C++23 Structure-of-Arrays (SoA) library for
+data-oriented design: a cache-friendly columnar data table with sparse optional columns, stable
+generational handles, and a familiar row-based API.** It is built for high-performance workloads
+such as game engines and Entity-Component-System (ECS) worlds, quantitative-finance tick and
+portfolio stores, and aerospace telemetry and time-series analytics, delivering column-oriented
+speed without giving up the way you naturally think about rows and records.
+
+**SoaTable stores tables of data so that the computer can read
 them as fast as physically possible.** 
 
 You still think in terms of rows, "here is one trade", "here
@@ -670,3 +677,14 @@ workflow, and what a good pull request looks like.
 ## License
 
 MIT, see [LICENSE](LICENSE).
+
+## Keywords
+
+C++ Structure-of-Arrays (SoA) library, data-oriented design (DOD), header-only C++23 library,
+cache-friendly columnar data table, sparse columns, Entity-Component-System (ECS) storage, ECS
+library for games, quantitative finance tick store, columnar analytics and group-by aggregation,
+time-series rolling windows, zero-copy `std::span` columns, SIMD-friendly aligned storage, Apache
+Arrow-style validity bitmaps, generational handles / handle-slot map, memory-mapped larger-than-RAM
+columns, PMR arena allocator table, dimensional analysis / units, no-exceptions and no-RTTI build
+for embedded and flight software, CMake / Conan / vcpkg package. A fast, modern C++ alternative to a
+plain `std::vector<Struct>` (Array-of-Structures / AoS) for high-performance data processing.
