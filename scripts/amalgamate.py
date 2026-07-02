@@ -49,7 +49,9 @@ def read_version() -> str:
     text = (REPO_ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
     match = re.search(r"project\(\s*\w+\s+VERSION\s+([0-9]+\.[0-9]+\.[0-9]+)", text)
     if match is None:
-        sys.exit("Could not determine project version (no VERSION.txt or literal in CMakeLists.txt)")
+        sys.exit(
+            "Could not determine project version (no VERSION.txt or literal in CMakeLists.txt)"
+        )
     return match.group(1)
 
 
