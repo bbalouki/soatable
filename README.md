@@ -1,4 +1,4 @@
-# SoaTable — a header-only C++23 Structure-of-Arrays (SoA) table for data-oriented design
+# SoaTable
 
 [![Build](https://github.com/bbalouki/soatable/actions/workflows/ci.yaml/badge.svg)](https://github.com/bbalouki/soatable/actions/workflows/ci.yaml)
 ![C++23](https://img.shields.io/badge/C%2B%2B-23-blue.svg)
