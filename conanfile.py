@@ -14,9 +14,22 @@ class SoaTableConan(ConanFile):
     url = "https://github.com/bbalouki/soatable"
     homepage = "https://github.com/bbalouki/soatable"
     description = (
-        "Header-only C++23 sparse Structure-of-Arrays table with generational handles."
+        "Header-only C++23 Structure-of-Arrays (SoA) table for data-oriented design: "
+        "cache-friendly columnar storage, sparse optional columns, and generational handles "
+        "for games/ECS, quantitative finance, and telemetry/time-series analytics."
     )
-    topics = ("soa", "ecs", "columnar", "header-only", "cpp23")
+    topics = (
+        "soa",
+        "structure-of-arrays",
+        "data-oriented-design",
+        "ecs",
+        "columnar",
+        "cache-friendly",
+        "header-only",
+        "cpp23",
+        "high-performance",
+        "game-engine",
+    )
 
     settings = "os", "arch", "compiler", "build_type"
     no_copy_source = True

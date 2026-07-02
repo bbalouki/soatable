@@ -1,7 +1,7 @@
 {
   "name": "soatable",
   "version": "0.1.0",
-  "description": "Header-only C++23 sparse Structure-of-Arrays table with generational handles.",
+  "description": "Header-only C++23 Structure-of-Arrays (SoA) table for data-oriented design: cache-friendly columnar storage, sparse optional columns, and generational handles for games/ECS, finance, and telemetry.",
   "homepage": "https://github.com/bbalouki/soatable",
   "license": "MIT",
   "dependencies": [
